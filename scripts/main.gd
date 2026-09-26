@@ -25,7 +25,6 @@ const BATTERY_SPOTS: Array[Vector3] = [
 
 
 func _ready() -> void:
-	Game.score = 0
 	Game.reset_level(BATTERY_SPOTS.size())
 	for i in BATTERY_SPOTS.size():
 		var battery := BATTERY_SCENE.instantiate()

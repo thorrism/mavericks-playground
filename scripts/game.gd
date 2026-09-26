@@ -13,6 +13,8 @@ var collected := 0
 func reset_level(battery_count: int) -> void:
 	total_batteries = battery_count
 	collected = 0
+	score = 0
+	score_changed.emit(score)
 
 
 func add_score(points: int) -> void:

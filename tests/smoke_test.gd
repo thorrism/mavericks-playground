@@ -59,6 +59,15 @@ func _run() -> void:
 	Input.action_release("move_right")
 	_check(robot.global_position.x > before.x + 0.5, "robot moves right when D is held")
 
+	# restart (R) must reset the score and the HUD text
+	main.queue_free()
+	await process_frame
+	main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	var label: Label = main.get_node("HUD/ScoreLabel")
+	_check(game.score == 0 and label.text == "Score: 0", "restart resets score + HUD (%s)" % label.text)
+
 	if _failures == 0:
 		print("ALL CHECKS PASSED")
 		quit(0)
