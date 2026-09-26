@@ -66,6 +66,8 @@ static func _make(sound_name: String) -> AudioStreamWAV:
 			return _click()
 		"door":
 			return _door()
+		"creak":
+			return _creak()
 	push_warning("Sfx: no sound called '%s'" % sound_name)
 	return _wav(PackedFloat32Array([0.0]))
 
@@ -446,6 +448,32 @@ static func _door() -> AudioStreamWAV:
 			s += lp.next(rng.randf_range(-1.0, 1.0)) * exp(-p * 25.0) * 0.8
 		out[i] = s
 	return _wav(_normalize(out, 0.9))
+
+
+## Old cupboard doors swinging shut: a slow wooden creak, a wobble, then the latch knock.
+static func _creak() -> AudioStreamWAV:
+	var rng := _rng(77)
+	var n := int(RATE * 0.9)
+	var out := _silence(n)
+	var lp := _LowPass.new(900.0)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var s := 0.0
+		if t < 0.6:
+			# stick-slip creak: a thin tone that wavers and slides down as the hinge gives
+			var f := lerpf(620.0, 380.0, t / 0.6) * (1.0 + 0.06 * sin(TAU * 13.0 * t))
+			phase += f / RATE
+			var env := minf(t / 0.08, 1.0) * (1.0 if t < 0.5 else 1.0 - (t - 0.5) / 0.1)
+			var grit := 0.6 + 0.4 * sin(TAU * 47.0 * t)
+			s = (sin(TAU * phase) * 0.35 + sin(TAU * phase * 2.01) * 0.15) * grit * env
+			s += lp.next(rng.randf_range(-1.0, 1.0)) * 0.15 * env
+		if t > 0.62:
+			var p := t - 0.62
+			s += sin(TAU * lerpf(140.0, 80.0, p / 0.3) * p) * exp(-p * 14.0) * 1.2
+			s += lp.next(rng.randf_range(-1.0, 1.0)) * exp(-p * 30.0) * 0.6
+		out[i] = s
+	return _wav(_normalize(out, 0.8))
 
 
 # ---------------------------------------------------------------------------

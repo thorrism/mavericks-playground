@@ -8,18 +8,19 @@ enum Difficulty { EASY, NORMAL, NIGHTMARE }
 
 const NAMES: Array[String] = ["EASY", "NORMAL", "NIGHTMARE"]
 const BLURBS: Array[String] = [
-	"slower monsters, a long wind-up before they swing, they give up quickly",
+	"slower monsters, a long wind-up before they swing, they give up quickly, cupboards always work",
 	"the real thing",
-	"fast, sharp-eyed, they swing quick and they don't forget you",
+	"fast, sharp-eyed, they swing quick, they don't forget you and they check the cupboards",
 ]
 ## What each difficulty does to every monster (multiplies the numbers in monster.gd).
 ##   speed   walking + chasing        sight    how far it sees / hears
 ##   windup  arms-up warning time     recover  how long it's stuck after a swing
 ##   persist how long it keeps hunting once it lost you      grace  safe seconds after a restart
+##   peek    how close to a cupboard it must lose you before it goes and looks inside (0 = never checks)
 const TUNING: Array[Dictionary] = [
-	{"speed": 0.85, "sight": 0.8, "windup": 1.35, "recover": 1.4, "persist": 0.7, "grace": 1.5},
-	{"speed": 1.0, "sight": 1.0, "windup": 1.0, "recover": 1.0, "persist": 1.0, "grace": 1.0},
-	{"speed": 1.12, "sight": 1.3, "windup": 0.8, "recover": 0.75, "persist": 1.5, "grace": 0.5},
+	{"speed": 0.85, "sight": 0.8, "windup": 1.35, "recover": 1.4, "persist": 0.7, "grace": 1.5, "peek": 0.0},
+	{"speed": 1.0, "sight": 1.0, "windup": 1.0, "recover": 1.0, "persist": 1.0, "grace": 1.0, "peek": 1.0},
+	{"speed": 1.12, "sight": 1.3, "windup": 0.8, "recover": 0.75, "persist": 1.5, "grace": 0.5, "peek": 1.8},
 ]
 const PATH := "user://kinder.cfg"
 

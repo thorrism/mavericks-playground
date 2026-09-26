@@ -11,7 +11,7 @@ extends Node3D
 ##   L  a flickering ceiling lamp
 ##   H  a cupboard you can hide in (put it against a wall). Inside, THEY can't see you -
 ##      unless one was already right behind you when you climbed in.
-##   t  a little kids' table with chairs (solid: hide behind it, THEY walk around it)
+##   t  a little kids' table with chairs (solid: THEY have to walk around it - but they see over it)
 ##   1 2 3  doors         a b c  buttons       button a opens door 1, b opens 2, c opens 3
 ##
 ## Every letter is one tile (TILE metres wide). Rows must all be the same length.
@@ -118,9 +118,16 @@ var _toy_count := 0
 var _rooms: Dictionary = {}   # Vector2i cell -> room number
 var _cupboards: Dictionary = {}   # Vector2i cell -> Vector3 direction the open front faces
 var hiding := false   # true while you're tucked inside a cupboard
+var flashlight_on := true
+var _cupboard_doors: Dictionary = {}   # Vector2i cell -> Array of door hinges (Node3D)
+var _door_swing: Dictionary = {}       # Vector2i cell -> 0.0 (hanging open) .. 1.0 (shut)
+var _flung: Dictionary = {}            # Vector2i cell -> seconds the doors stay yanked open
+const DOOR_OPEN_ANGLES: Array[float] = [1.1, 2.2]   # left / right door, hanging open
+const DOOR_SHUT_GAP := 0.05                        # a crack of light between the shut doors
 
 
 func _ready() -> void:
+	Game.hiding = false
 	_world = Node3D.new()
 	_world.name = "World"
 	add_child(_world)
@@ -130,6 +137,7 @@ func _ready() -> void:
 	Game.all_collected.connect(_on_all_toys_found)
 	Game.caught.connect(_on_caught)
 	Game.spotted.connect(_on_spotted)
+	Game.found.connect(_on_found)
 	Game.missed.connect(_on_missed)
 
 	robot.collision_mask |= 1 << (FENCE_LAYER - 1)
@@ -211,6 +219,10 @@ func _process(delta: float) -> void:
 
 	if not _caught and not _escaped and (Input.is_action_just_pressed("drone") or TouchControls.drone_just_pressed()):
 		_set_drone_active(not drone.active)
+	if not _caught and not _escaped and Input.is_action_just_pressed("flashlight"):
+		flashlight_on = not flashlight_on
+		if not flashlight_on:
+			Game.say("Lights off.  They can still hear you.", 1.5)
 
 	if not _escaped and not _caught and robot.global_position.z < _exit_z - TILE * 0.5:
 		_on_escaped()
@@ -221,6 +233,53 @@ func _process(delta: float) -> void:
 		Game.hiding = hiding
 		if hiding and not _caught and not _escaped:
 			Game.say("You're hiding.  They can't see you in here... stay still.", 2.5)
+			_creak(_cell_of(robot.global_position), 0.0, 1.0)
+	_swing_cupboard_doors(delta)
+
+
+## The doors creak shut behind you when you climb in and swing open again as you step out -
+## or get yanked wide when one of THEM comes to look.
+func _swing_cupboard_doors(delta: float) -> void:
+	var inside := cupboard_at(robot.global_position) if not drone.active else Vector2i(-1, -1)
+	for cell: Vector2i in _cupboard_doors:
+		var flung: float = _flung.get(cell, 0.0)
+		if flung > 0.0:
+			_flung[cell] = flung - delta
+		var want := 1.0 if (cell == inside and flung <= 0.0) else 0.0
+		var swing: float = _door_swing.get(cell, 0.0)
+		var rate := 6.0 if flung > 0.0 else (1.4 if want > swing else 2.2)
+		swing = move_toward(swing, want, delta * rate)
+		_door_swing[cell] = swing
+		var hinges: Array = _cupboard_doors[cell]
+		for i in hinges.size():
+			var hinge: Node3D = hinges[i]
+			var side := -1.0 if i == 0 else 1.0
+			hinge.rotation.y = side * lerpf(DOOR_OPEN_ANGLES[i], DOOR_SHUT_GAP, swing)
+
+
+## A monster throws the cupboard doors open (they stay open a while).
+func fling_cupboard(cell: Vector2i) -> void:
+	if not _cupboard_doors.has(cell):
+		return
+	if _door_swing.get(cell, 0.0) > 0.2:
+		_creak(cell, 6.0, 1.6)
+	_flung[cell] = 6.0
+
+
+func _creak(cell: Vector2i, db: float, pitch: float) -> void:
+	if not _cupboard_doors.has(cell):
+		return
+	var hinge: Node3D = _cupboard_doors[cell][0]
+	var sound := AudioStreamPlayer3D.new()
+	sound.stream = Sfx.get_sound("creak")
+	sound.unit_size = 6.0
+	sound.max_distance = 40.0
+	sound.volume_db = db
+	sound.pitch_scale = pitch
+	sound.autoplay = true
+	sound.finished.connect(sound.queue_free)
+	hinge.get_parent().add_child(sound)
+	sound.position = Vector3(0, 1.2, 0.1)
 
 
 func _update_camera(delta: float) -> void:
@@ -259,10 +318,11 @@ func _update_fear(delta: float) -> void:
 	var current: float = mat.get_shader_parameter("strength")
 	mat.set_shader_parameter("strength", clampf(move_toward(current, vignette_target, delta * 1.5) + _scare_flash * 0.6, 0.0, 1.0))
 
-	if _flicker > 0.0:
-		flashlight.light_energy = flashlight_energy * (0.15 if randf() < 0.35 else 1.0)
-	elif flashlight.light_energy != flashlight_energy:
-		flashlight.light_energy = flashlight_energy
+	var energy := flashlight_energy if flashlight_on else 0.0
+	if _flicker > 0.0 and flashlight_on:
+		energy = flashlight_energy * (0.15 if randf() < 0.35 else 1.0)
+	if flashlight.light_energy != energy:
+		flashlight.light_energy = energy
 
 
 func _set_drone_active(on: bool, silent := false) -> void:
@@ -328,6 +388,17 @@ func _on_spotted(monster: Node3D) -> void:
 	_flicker = 0.6
 	var words: String = scare_words[randi() % scare_words.size()]
 	blood_text.scare(words.replace("NAME", _name_of(monster)), 2.4)
+
+
+## It opened the cupboard doors and there you were.
+func _on_found(monster: Node3D) -> void:
+	if _caught or _escaped:
+		return
+	_shake = maxf(_shake, 0.7)
+	_scare_flash = 1.0
+	_flicker = 0.8
+	blood_text.scare("%s FOUND YOU" % _name_of(monster), 2.4)
+	Game.say("GET OUT.  RUN.", 1.5)
 
 
 ## It swung and hit the floor next to you: a jolt, and its name in blood.
@@ -480,6 +551,30 @@ func is_hidden(pos: Vector3) -> bool:
 	var depth := local.dot(open)          # +: towards the open front
 	var side := (local - open * depth).length()
 	return depth < 0.25 and side < 0.75
+
+
+## The cupboard closest to pos, or an empty Dictionary if none is within max_dist:
+##   { "cell": Vector2i, "front": Vector3 (the floor just outside its doors), "inside": Vector3 }
+func nearest_cupboard(pos: Vector3, max_dist: float, front_ok: Callable = Callable()) -> Dictionary:
+	var best := {}
+	var best_dist := max_dist
+	for cell: Vector2i in _cupboards:
+		var inside := _tile_pos(cell.y, cell.x)
+		var d := Vector2(inside.x - pos.x, inside.z - pos.z).length()
+		if d > best_dist:
+			continue
+		var open: Vector3 = _cupboards[cell]
+		var front := inside + open * TILE
+		if front_ok.is_valid() and not front_ok.call(front):
+			continue
+		best_dist = d
+		best = {"cell": cell, "front": front, "inside": inside}
+	return best
+
+
+## Which cupboard pos is hiding in; Vector2i(-1, -1) if it isn't hiding.
+func cupboard_at(pos: Vector3) -> Vector2i:
+	return _cell_of(pos) if is_hidden(pos) else Vector2i(-1, -1)
 
 
 func _cell_of(pos: Vector3) -> Vector2i:
@@ -720,14 +815,18 @@ func _add_cupboard(row: int, col: int, pos: Vector3) -> void:
 	_add_box(holder, Vector3(0, 2.37, -0.48), Vector3(1.6, 0.06, 1.0), wood.darkened(0.2), true)
 	_add_box(holder, Vector3(0, 2.05, -0.5), Vector3(1.5, 0.04, 0.9), wood.darkened(0.4), false)   # a shelf above your head
 	_add_box(holder, Vector3(0, 0.03, -0.48), Vector3(1.6, 0.06, 1.0), wood.darkened(0.5), false)
-	# two doors, hanging open
-	for side in [-1.0, 1.0]:
+	# two doors, hanging open (they swing shut once you're inside - see _swing_cupboard_doors)
+	var hinges: Array = []
+	for i in 2:
+		var side := -1.0 if i == 0 else 1.0
 		var hinge := Node3D.new()
 		hinge.position = Vector3(side * 0.8, 1.2, 0.02)
-		hinge.rotation.y = side * (2.2 if side > 0.0 else 1.1)
+		hinge.rotation.y = side * DOOR_OPEN_ANGLES[i]
 		holder.add_child(hinge)
 		var panel := _add_box(hinge, Vector3(-side * 0.39, 0.0, 0.0), Vector3(0.78, 2.35, 0.04), wood.darkened(0.1), false)
 		_add_box(panel, Vector3(-side * 0.3, 0.0, 0.03), Vector3(0.05, 0.16, 0.03), Color("2a2420"), false)   # handle
+		hinges.append(hinge)
+	_cupboard_doors[Vector2i(col, row)] = hinges
 	# something scratched inside the back
 	var label := Label3D.new()
 	label.text = "hide"

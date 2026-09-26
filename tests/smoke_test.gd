@@ -311,6 +311,65 @@ func _test_kinder() -> void:
 	monster.set_physics_process(false)
 	_check(not level.hiding and not monster._busted, "out of the cupboard: not hiding any more")
 
+	# ...but lose it right next to a cupboard and it comes over to look inside
+	var near_front: Dictionary = level.nearest_cupboard(hide_pos + facing * 1.0, 3.5)
+	_check(not near_front.is_empty() and near_front["cell"] == hide_cell and level.cupboard_at(hide_pos) == hide_cell
+		and level.cupboard_at(start) == Vector2i(-1, -1), "the level knows which cupboard is nearest / which one you're in")
+	var none_ok := func(_front: Vector3) -> bool: return false
+	_check(level.nearest_cupboard(hide_pos, 3.5, none_ok).is_empty(), "nearest_cupboard skips cupboards the caller rejects")
+	var found := [0]
+	game.found.connect(func(_by): found[0] += 1)
+	monster._home = hide_pos + facing * 7.0
+	monster.global_position = monster._home
+	monster._visual.rotation.y = atan2(-facing.x, -facing.z)
+	monster._target = monster.global_position
+	monster._idle_for = 60.0
+	robot.global_position = hide_pos + facing * 1.0   # standing right in front of the open doors
+	monster.set_physics_process(true)
+	await _settle(10)
+	_check(monster.chasing and not monster._busted, "it sees you from 6 m, in front of the cupboard")
+	robot.global_position = hide_pos   # ...you dive in - too far away for it to have 'watched' you
+	await _settle(3)
+	_check(level.hiding and not monster._busted and not monster._can_see(robot), "you're hidden and it can't see you...")
+	await _settle(50)
+	var swing: float = level._door_swing.get(hide_cell, 0.0)
+	_check(swing > 0.5 and absf(level._cupboard_doors[hide_cell][0].rotation.y) < 0.6, "the cupboard doors creak shut behind you (%.2f)" % swing)
+	var found_after := 50
+	for _i in 40:
+		await _settle(10)
+		if found[0] > 0:
+			break
+		found_after += 10
+	_check(not monster._check.is_empty() or monster._peek_timer > 0.0 or found[0] > 0, "...so it walks over to the cupboard to look inside")
+	_check(found[0] == 1 and monster._busted and monster._can_see(robot), "...and finds you (after %d frames): FOUND YOU, and it can attack you in there" % found_after)
+	_check(level._flung.get(hide_cell, 0.0) > 0.0 and level._door_swing[hide_cell] < 0.5, "it flung the doors open to look")
+	robot.global_position = start
+	monster.chasing = false
+	monster._hunt_timer = 0.0
+	monster._search_timer = 0.0
+	monster._check = {}
+	monster._peek_timer = 0.0
+	monster._visual.rotation.y = PI
+	await _settle(2)
+	monster.set_physics_process(false)
+	# on EASY they never check cupboards
+	settings.set_difficulty(settings.Difficulty.EASY)
+	_check(monster.check_cupboard_range == 0.0 and monster.hide_catch_range < 4.0, "EASY: monsters never check cupboards and need to be closer to bust you")
+	settings.set_difficulty(settings.Difficulty.NORMAL)
+	_check(is_equal_approx(monster.check_cupboard_range, 3.5), "NORMAL: cupboard checks back on")
+	await _settle(60)
+	_check(level._door_swing[hide_cell] < 0.05, "back out in the open: the doors hang open again")
+
+	# F: flashlight off - and the room is nearly black
+	var torch: SpotLight3D = level.flashlight
+	level.flashlight_on = false
+	await _settle(2)
+	_check(torch.light_energy == 0.0, "flashlight off")
+	level.flashlight_on = true
+	await _settle(2)
+	_check(torch.light_energy == level.flashlight_energy, "flashlight back on")
+	_check(level.env.environment.ambient_light_energy < 0.1, "ambient light is almost nothing (%.2f)" % level.env.environment.ambient_light_energy)
+
 	# a monster from YOUR room seeing you: bloody letters + red edges + a scream, and it comes for you
 	monster._room = start_room
 	monster._home = start + Vector3(0, 0.1, 6.0)
@@ -375,6 +434,7 @@ func _test_kinder() -> void:
 	_check(monster.attack == monster.Attack.NONE and frames > 20, "...and it is stuck recovering for a moment (%d frames)" % frames)
 
 	# get out of its room while it's winding up: the swing lands on nothing and you don't even feel it
+	robot.global_position = start   # back in the open (the sidestep can end inside a cupboard)
 	monster._cooldown = 0.0
 	monster.chasing = true
 	monster._hunt_timer = 10.0

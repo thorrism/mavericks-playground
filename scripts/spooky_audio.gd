@@ -58,6 +58,7 @@ func _ready() -> void:
 	add_child(_ambient)
 	Game.collected_one.connect(func(): _play(_fx, "chime"))
 	Game.spotted.connect(func(_by: Node3D): _play(_fx, "scream"))
+	Game.found.connect(func(_by: Node3D): _play(_fx, "scream", 2.0))
 	Game.caught.connect(func(_by: Node3D): _play(_fx, "screech"))
 
 
