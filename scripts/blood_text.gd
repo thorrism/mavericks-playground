@@ -2,7 +2,9 @@ extends Control
 ## Huge letters that slam onto the screen one by one and drip blood, when something sees you.
 ## Call scare("RUN") and it does the rest.
 
-@export var font_size := 150
+@export var font_size := 128
+@export var y_fraction := 0.42   # how far down the screen the letters sit
+@export var drip_length := 1.0   # 1 = long drips, 0.5 = half as long
 @export var color := Color(0.55, 0.02, 0.02)
 @export var shadow_color := Color(0.0, 0.0, 0.0, 0.85)
 
@@ -31,7 +33,7 @@ func scare(text: String, seconds := 2.8) -> void:
 	for ch in text:
 		total += _font.get_char_size(ch.unicode_at(0), fs).x
 	var x := (size.x - total) / 2.0
-	var y := size.y * 0.42
+	var y := size.y * y_fraction
 	for i in text.length():
 		var ch := text[i]
 		var w := _font.get_char_size(ch.unicode_at(0), fs).x
@@ -43,7 +45,7 @@ func scare(text: String, seconds := 2.8) -> void:
 			for _k in randi_range(1, 3):
 				_drips.append({
 					"x": x + w * randf_range(0.15, 0.85), "y": y + fs * 0.08, "len": 0.0,
-					"max": randf_range(60.0, 260.0) * fs / font_size, "speed": randf_range(140.0, 380.0),
+					"max": randf_range(60.0, 260.0) * drip_length * fs / font_size, "speed": randf_range(140.0, 380.0),
 					"w": randf_range(4.0, 11.0) * fs / font_size, "delay": i * 0.05 + randf_range(0.1, 0.6),
 				})
 		x += w
@@ -78,7 +80,7 @@ func _draw() -> void:
 		var t: float = _age - l.delay
 		if t < 0.0:
 			continue
-		var punch := 1.0 + maxf(0.0, 0.3 - t * 2.5) * 2.5   # slams in big, then settles
+		var punch := 1.0 + maxf(0.0, 0.3 - t * 2.5) * 2.0   # slams in big, then settles
 		draw_set_transform(Vector2(l.x, l.y), l.rot, Vector2.ONE * punch)
 		draw_char_outline(_font, Vector2(6, 8), l.ch, l.size, 10, sc)
 		draw_char(_font, Vector2(6, 8), l.ch, l.size, sc)

@@ -98,10 +98,34 @@ var _voice_sound := "giggle"
 var _attack_sound := "snarl"
 var _step_db := 0.0
 
+# the NORMAL numbers from _apply_kind, so difficulty changes scale from here and never compound
+var _base_wander_speed := 0.0
+var _base_chase_speed := 0.0
+var _base_see_distance := 0.0
+var _base_hear_distance := 0.0
+var _base_windup_time := 0.0
+var _base_commit_before := 0.0
+var _base_recover_time := 0.0
+var _base_lose_after := 0.0
+var _base_search_time := 0.0
+var _base_spawn_grace := 0.0
+
 
 func _ready() -> void:
 	add_to_group("monster")
 	_apply_kind()
+	_base_wander_speed = wander_speed
+	_base_chase_speed = chase_speed
+	_base_see_distance = see_distance
+	_base_hear_distance = hear_distance
+	_base_windup_time = windup_time
+	_base_commit_before = commit_before
+	_base_recover_time = recover_time
+	_base_lose_after = lose_after
+	_base_search_time = search_time
+	_base_spawn_grace = spawn_grace
+	_apply_difficulty()
+	Settings.changed.connect(_apply_difficulty)
 	_grace = spawn_grace
 	_home = global_position
 	_target = _home
@@ -121,6 +145,21 @@ func _ready() -> void:
 	_audio.autoplay = true
 	_audio.position.y = 1.0
 	add_child(_audio)
+
+
+## The difficulty picked on the title screen scales the numbers from _apply_kind (see Settings.TUNING).
+func _apply_difficulty() -> void:
+	var t: Dictionary = Settings.monster_tuning()
+	wander_speed = _base_wander_speed * t["speed"]
+	chase_speed = _base_chase_speed * t["speed"]
+	see_distance = _base_see_distance * t["sight"]
+	hear_distance = _base_hear_distance * t["sight"]
+	windup_time = _base_windup_time * t["windup"]
+	commit_before = _base_commit_before * t["windup"]
+	recover_time = _base_recover_time * t["recover"]
+	lose_after = _base_lose_after * t["persist"]
+	search_time = _base_search_time * t["persist"]
+	spawn_grace = _base_spawn_grace * t["grace"]
 
 
 func _apply_kind() -> void:

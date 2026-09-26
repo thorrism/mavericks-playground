@@ -86,6 +86,8 @@ const FENCE_LAYER := 2
 @onready var fade: ColorRect = $HUD/Fade
 @onready var vignette: ColorRect = $HUD/Vignette
 @onready var blood_text: Control = $HUD/BloodText
+@onready var hud: CanvasLayer = $HUD
+@onready var menu: CanvasLayer = $Menu
 @onready var env: WorldEnvironment = $WorldEnvironment
 
 var drone: CharacterBody3D
@@ -93,6 +95,7 @@ var exit_door: StaticBody3D
 var _doors := {}       # "1" -> door node
 var _escaped := false
 var _caught := false
+var _playing := false   # false while the title screen is up
 var _exit_z := 0.0
 var _world: Node3D
 var _grid: AStarGrid2D
@@ -144,6 +147,32 @@ func _ready() -> void:
 
 	_yaw = 0.0   # face "up" the map, towards the fence and the first door
 	_update_camera(0.0)
+
+	menu.opened.connect(func() -> void: hud.visible = false)
+	menu.play.connect(_on_menu_play)
+	menu.restart.connect(_restart)
+	if Game.title_pending:
+		# first boot / just escaped: the title screen, with the level frozen behind it
+		Game.title_pending = false
+		menu.show_title.call_deferred(Game.last_result)
+		Game.last_result = ""
+	else:
+		_begin_run()
+
+
+## PLAY on the title screen, or RESUME from the pause menu.
+func _on_menu_play() -> void:
+	hud.visible = true
+	if not _playing:
+		_begin_run()
+	elif not TouchControls.is_touch():
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _begin_run() -> void:
+	_playing = true
+	Settings.record_attempt()
+	hud.start_clock()
 	if not TouchControls.is_touch():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -152,8 +181,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_look(event.relative * mouse_sensitivity)
 	elif event.is_action_pressed("ui_cancel"):
-		# Esc gives the mouse back; click the window to grab it again
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if _playing and not _caught and not _escaped:
+			menu.show_pause()
 	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not TouchControls.is_touch():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -257,6 +286,10 @@ func _on_escaped() -> void:
 		_set_drone_active(false, true)
 	robot.active = false
 	robot.velocity = Vector3.ZERO
+	hud.stop_clock()
+	var record := Settings.record_escape(hud.elapsed)
+	Game.last_result = "YOU ESCAPED in %s%s" % [Settings.fmt_time(hud.elapsed), "   -   NEW RECORD!" if record else ""]
+	Game.title_pending = true
 	Game.say("YOU ESCAPED!", 4.0)
 	blood_text.scare("YOU ESCAPED", 3.5)
 	fade.color = Color(1.0, 0.9, 0.6, 1.0)
@@ -272,11 +305,11 @@ func _on_escaped() -> void:
 func _on_spotted(monster: Node3D) -> void:
 	if _caught or _escaped:
 		return
-	_shake = maxf(_shake, 0.6)
-	_scare_flash = 1.0
-	_flicker = 0.7
+	_shake = maxf(_shake, 0.5)
+	_scare_flash = 0.85
+	_flicker = 0.6
 	var words: String = scare_words[randi() % scare_words.size()]
-	blood_text.scare(words.replace("NAME", _name_of(monster)))
+	blood_text.scare(words.replace("NAME", _name_of(monster)), 2.4)
 
 
 ## It swung and hit the floor next to you: a jolt, and its name in blood.
@@ -303,6 +336,7 @@ func _on_caught(monster: Node3D) -> void:
 	if drone.active:
 		_set_drone_active(false, true)
 	robot.active = false
+	hud.stop_clock()
 	_shake = 1.0
 	var to_monster := monster.global_position - robot.global_position
 	_yaw = atan2(-to_monster.x, -to_monster.z)

@@ -4,6 +4,7 @@ extends SceneTree
 
 var _failures := 0
 var game: Node
+var settings: Node
 
 
 func _check(ok: bool, what: String) -> void:
@@ -24,6 +25,14 @@ func _run() -> void:
 		game = load("res://scripts/game.gd").new()
 		game.name = "Game"
 		root.add_child(game)
+	settings = root.get_node_or_null("Settings")
+	if settings == null:
+		settings = load("res://scripts/settings.gd").new()
+		settings.name = "Settings"
+		root.add_child(settings)
+	settings.persist = false   # don't touch the player's saved records
+	settings.difficulty = settings.Difficulty.NORMAL
+	game.title_pending = false   # no title screen: straight into the level
 
 	await _test_arena()
 	await _test_kinder()
@@ -403,9 +412,42 @@ func _test_kinder() -> void:
 		if child.has_method("find_path"):
 			after_escape = child
 	_check(after_escape != null and after_escape != level and game.collected == 0, "escaping starts a fresh level")
+	_check(settings.escapes == 1 and settings.best_time > 0.0, "escape recorded: %d escape(s), best %s" % [settings.escapes, settings.fmt_time(settings.best_time)])
 	if after_escape:
+		await _test_menus(after_escape)
 		after_escape.queue_free()
 	await process_frame
+
+
+## Title screen after an escape, PLAY, Esc pause menu, difficulty changing monsters live.
+func _test_menus(level: Node3D) -> void:
+	var menu: CanvasLayer = level.get_node("Menu")
+	var hud: CanvasLayer = level.get_node("HUD")
+	await process_frame
+	_check(menu.mode == menu.Mode.TITLE and paused, "after escaping, the title screen is up and the level is frozen")
+	_check(menu._result.visible and menu._result.text.begins_with("YOU ESCAPED in"), "title shows your time: '%s'" % menu._result.text)
+	_check(not level._playing and not hud.ticking, "clock isn't running on the title screen")
+	var tries: int = settings.attempts
+	menu._on_play()
+	await process_frame
+	_check(menu.mode == menu.Mode.HIDDEN and not paused and level._playing and hud.ticking, "PLAY: menu gone, level running, clock ticking")
+	_check(settings.attempts == tries + 1, "PLAY counts as a try (%d)" % settings.attempts)
+
+	var monster: CharacterBody3D = get_nodes_in_group("monster")[0]
+	var normal_windup: float = monster.windup_time
+	var normal_speed: float = monster.chase_speed
+	menu.show_pause()
+	await process_frame
+	_check(menu.mode == menu.Mode.PAUSED and paused and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "pause menu freezes the game and frees the mouse")
+	settings.set_difficulty(settings.Difficulty.EASY)
+	_check(monster.windup_time > normal_windup * 1.2 and monster.chase_speed < normal_speed, "EASY: longer wind-up (%.2fs), slower chase (%.1f)" % [monster.windup_time, monster.chase_speed])
+	settings.set_difficulty(settings.Difficulty.NIGHTMARE)
+	_check(monster.windup_time < normal_windup and monster.chase_speed > normal_speed, "NIGHTMARE: shorter wind-up (%.2fs), faster chase (%.1f)" % [monster.windup_time, monster.chase_speed])
+	settings.set_difficulty(settings.Difficulty.NORMAL)
+	_check(is_equal_approx(monster.windup_time, normal_windup), "back to NORMAL restores the numbers exactly")
+	menu._on_play()
+	await process_frame
+	_check(menu.mode == menu.Mode.HIDDEN and not paused, "RESUME unfreezes the game")
 
 
 func _count_in_map(ch: String) -> int:
