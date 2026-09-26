@@ -15,8 +15,10 @@ at the very top of the school.
 - Step on a **button** (or land the drone on it) and the door of the same colour opens.
 - **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
 - Three **monsters** (map letters `M`, `J`, `O`): a tall teal grinning thing with a bow tie, a huge green
-  brute, and a lanky yellow bird. They know the way around walls, run to where they last saw you and
-  search there - but you are a bit faster, so break line of sight and hide.
+  brute, and a lanky yellow bird - one per room. They know the way around walls, run to where they
+  last saw you and search there - but you are a bit faster, and **a monster never leaves its own
+  room**: get through a doorway and it gives up. They also leave you alone for the first few seconds
+  after a (re)start.
 - **Seen**: dripping blood letters, a scream, red screen edges, shaking, your flashlight stutters,
   and the music turns into panic. **Caught**: red flash, black, and the level starts over.
 - Collect every toy and the **golden door** opens and glows; walk through it to escape.

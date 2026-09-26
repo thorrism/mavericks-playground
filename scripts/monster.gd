@@ -5,7 +5,8 @@ extends CharacterBody3D
 ##   BIRD      a lanky yellow bird with long orange legs and a beak    (map letter O)
 ## They wander their room. If one SEES you (in front of it, nothing in the way) or HEARS you
 ## walking close by, it hunts you: it knows the way around walls, goes to where it last saw
-## you, searches around there, and only gives up after a while.
+## you, searches around there, and only gives up after a while. But each one is tied to the
+## room it was born in - it can't follow you through a doorway, so a door is always an escape.
 
 enum Kind { TALL_ONE, GIANT, BIRD }
 
@@ -33,6 +34,7 @@ var kind_name := "the tall one"
 var color := Color("2a9aa8")
 
 var _level: Node3D
+var _room := -1        # the room it lives in (-1 = free to roam anywhere)
 var _home: Vector3
 var _target: Vector3
 var _path := PackedVector3Array()
@@ -75,6 +77,8 @@ func _ready() -> void:
 	_level = get_parent()
 	while _level and not _level.has_method("find_path"):
 		_level = _level.get_parent()
+	if _level and _level.has_method("room_at"):
+		_room = _level.room_at(_home)
 	_build()
 	_add_collision()
 	_audio = AudioStreamPlayer3D.new()
@@ -163,6 +167,15 @@ func _physics_process(delta: float) -> void:
 	var sees := awake and player != null and _can_see(player)
 	var hears := awake and player != null and not sees and _can_hear(player)
 
+	if not _in_my_room(global_position) and _in_my_room(_home):
+		# somehow shoved out of its room: forget you and go home
+		sees = false
+		hears = false
+		_hunt_timer = 0.0
+		_search_timer = 0.0
+		_target = _home
+		_repath_in = minf(_repath_in, 0.0)
+
 	if sees:
 		_target = player.global_position
 		_hunt_timer = lose_after
@@ -190,7 +203,7 @@ func _physics_process(delta: float) -> void:
 		_retarget_in -= delta
 	else:
 		if chasing:
-			Game.say("...it lost you.  Keep quiet.", 2.0)
+			Game.say("...it lost you.  It won't leave its room.", 2.0)
 		chasing = false
 		_retarget_in -= delta
 		if _retarget_in <= 0.0 or _flat_distance(_target) < 0.6:
@@ -222,7 +235,8 @@ func _physics_process(delta: float) -> void:
 	if _voice_in <= 0.0:
 		_say(0.0)
 
-	if player and _cooldown <= 0.0 and global_position.distance_to(player.global_position) < catch_distance:
+	if player and awake and _cooldown <= 0.0 and _in_my_room(player.global_position) \
+			and global_position.distance_to(player.global_position) < catch_distance:
 		_catch(player)
 
 
@@ -314,7 +328,16 @@ func _find_player() -> Node3D:
 	return p
 
 
+## Is this spot inside the room it belongs to? (Doorways count as outside.)
+func _in_my_room(pos: Vector3) -> bool:
+	if _room < 0 or _level == null:
+		return true
+	return _level.room_at(pos) == _room
+
+
 func _can_see(player: Node3D) -> bool:
+	if not _in_my_room(player.global_position):
+		return false
 	var to_player := player.global_position - global_position
 	var dist := to_player.length()
 	if dist > see_distance:
@@ -335,6 +358,8 @@ func _can_see(player: Node3D) -> bool:
 
 
 func _can_hear(player: Node3D) -> bool:
+	if not _in_my_room(player.global_position):
+		return false
 	if global_position.distance_to(player.global_position) > hear_distance:
 		return false
 	var v: Vector3 = player.velocity if "velocity" in player else Vector3.ZERO
@@ -350,7 +375,7 @@ func _pick_wander_target() -> void:
 		var angle := randf() * TAU
 		var dist := randf_range(2.0, wander_radius)
 		var candidate := _home + Vector3(cos(angle), 0.0, sin(angle)) * dist
-		if _level == null or _level.is_walkable(candidate):
+		if _level == null or (_level.is_walkable(candidate) and _in_my_room(candidate)):
 			_target = candidate
 			break
 	_retarget_in = randf_range(2.0, 5.0)
@@ -360,7 +385,7 @@ func _pick_wander_target() -> void:
 func _pick_search_target() -> void:
 	for _try in 8:
 		var candidate := _target + Vector3(randf_range(-5.0, 5.0), 0.0, randf_range(-5.0, 5.0))
-		if _level == null or _level.is_walkable(candidate):
+		if _level == null or (_level.is_walkable(candidate) and _in_my_room(candidate)):
 			_target = candidate
 			break
 	_retarget_in = randf_range(1.5, 3.0)
