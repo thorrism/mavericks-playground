@@ -29,6 +29,7 @@ enum Attack { NONE, WINDUP, STRIKE, RECOVER }
 @export var lose_after := 2.0          # seconds it keeps going for your last spot after losing you
 @export var search_time := 4.0         # ...then how long it searches around there
 @export var spawn_grace := 4.0         # seconds after the level starts before it will notice you
+@export var hide_catch_range := 4.0    # if it's already hunting you and this close, a cupboard won't save you
 @export var gravity := 22.0
 
 @export_group("Attack")
@@ -57,6 +58,10 @@ var _path := PackedVector3Array()
 var _path_index := 0
 var _repath_in := 0.0
 var _retarget_in := 0.0
+var _idle_for := 0.0        # standing still, having a look around, between wanders
+var _was_seeing := false
+var _was_hidden := false
+var _busted := false        # it watched you climb into the cupboard: hiding won't work this time
 var _hunt_timer := 0.0
 var _search_timer := 0.0
 var _cooldown := 0.0
@@ -269,7 +274,14 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var awake := _grace <= 0.0
+	var hidden := player != null and _is_hidden(player)
+	if hidden and not _was_hidden and _was_seeing and _flat_distance(player.global_position) < hide_catch_range:
+		_busted = true
+	if not hidden:
+		_busted = false
+	_was_hidden = hidden
 	var sees := awake and player != null and _can_see(player)
+	_was_seeing = sees
 	var hears := awake and player != null and not sees and _can_hear(player)
 
 	if not _in_my_room(global_position) and _in_my_room(_home):
@@ -282,6 +294,7 @@ func _physics_process(delta: float) -> void:
 		_repath_in = minf(_repath_in, 0.0)
 
 	if sees:
+		_idle_for = 0.0
 		_target = player.global_position
 		_hunt_timer = lose_after
 		_search_timer = search_time
@@ -292,6 +305,7 @@ func _physics_process(delta: float) -> void:
 		chasing = true
 	elif hears and not chasing:
 		# something moved over there... go and look
+		_idle_for = 0.0
 		_target = player.global_position
 		_retarget_in = 3.0
 		_repath_in = 0.0
@@ -311,8 +325,17 @@ func _physics_process(delta: float) -> void:
 			Game.say("...%s lost you.  It won't leave its room." % kind_name, 2.0)
 		chasing = false
 		_retarget_in -= delta
-		if _retarget_in <= 0.0 or _flat_distance(_target) < 0.6:
+		if _idle_for > 0.0:
+			# got where it was going: stand a while and look slowly left and right
+			_idle_for -= delta
+			_visual.rotation.y += sin(_time * 0.9) * delta * 0.7
+			if _idle_for <= 0.0:
+				_pick_wander_target()
+		elif _retarget_in <= 0.0:
 			_pick_wander_target()
+		elif _flat_distance(_target) < 0.6:
+			_idle_for = randf_range(1.5, 4.5)
+			_target = global_position
 
 	var speed := chase_speed if chasing else wander_speed
 	var direct := sees or _flat_distance(_target) < 2.5
@@ -345,7 +368,7 @@ func _physics_process(delta: float) -> void:
 		_say(0.0)
 
 	# close enough and in front of it: wind up for a swing
-	if player and chasing and _cooldown <= 0.0 and _in_my_room(player.global_position):
+	if player and chasing and _cooldown <= 0.0 and _in_my_room(player.global_position) and (not hidden or _busted):
 		var to_player := player.global_position - global_position
 		to_player.y = 0.0
 		if to_player.length() < strike_range and facing.dot(to_player.normalized()) > 0.3:
@@ -594,6 +617,9 @@ func _can_see(player: Node3D) -> bool:
 	var dist := to_player.length()
 	if dist > see_distance:
 		return false
+	# tucked in a cupboard: invisible, unless it watched you climb in
+	if _is_hidden(player) and not _busted:
+		return false
 	# only in front of it (unless it's already hunting you - then it keeps you in the corner of its eye)
 	if not chasing and dist > 2.0:
 		var forward := Vector3(sin(_visual.rotation.y), 0.0, cos(_visual.rotation.y))
@@ -610,12 +636,16 @@ func _can_see(player: Node3D) -> bool:
 
 
 func _can_hear(player: Node3D) -> bool:
-	if not _in_my_room(player.global_position):
+	if not _in_my_room(player.global_position) or _is_hidden(player):
 		return false
 	if global_position.distance_to(player.global_position) > hear_distance:
 		return false
 	var v: Vector3 = player.velocity if "velocity" in player else Vector3.ZERO
 	return Vector2(v.x, v.z).length() > 2.0
+
+
+func _is_hidden(player: Node3D) -> bool:
+	return _level != null and _level.has_method("is_hidden") and _level.is_hidden(player.global_position)
 
 
 func _flat_distance(to: Vector3) -> float:

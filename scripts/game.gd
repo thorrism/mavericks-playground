@@ -19,6 +19,7 @@ var collected := 0
 ## false after you get caught (straight back in - no menu between tries).
 var title_pending := true
 var last_result := ""   # "YOU ESCAPED in 1:23" for the title screen to show
+var hiding := false     # true while you're inside a cupboard (the level keeps this up to date)
 
 
 func reset_level(battery_count: int) -> void:

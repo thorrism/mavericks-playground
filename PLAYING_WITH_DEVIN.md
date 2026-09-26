@@ -16,6 +16,7 @@ The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
 #..................#      W  low wall (drone only)     =  fence (jump over)
 #.T..J......L..M.T.#      L  flickering lamp            1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
 #..................#      M  Banbo (tall teal)   J  Jumbo (big green)   O  Opi the bird (not on the map right now)
+#H....t............#      H  cupboard to hide in (against a wall)    t  kids' table with chairs
 ```
 
 So "add a bird in the top room" is literally typing one `O`. It's dark and first person:
@@ -41,6 +42,11 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 - "Make the drone sound higher / louder." (`drone` in sfx.gd, `_update_whine` in drone.gd)
 - "Make it even darker" / "a bit brighter". (`flashlight_energy`, `fog_density`, `ambient_light_energy` in kinder.tscn)
 - "Make the lamps flicker like crazy" / "add a lamp in the start room." (`flicker` in lamp.gd, an `L` on the map)
+- "Put a hiding cupboard in the top room" / "more tables." (an `H` against a wall, a `t` anywhere, on the map)
+- "Let them find me in cupboards if they're closer" (`hide_catch_range` in monster.gd)
+- "More junk on the floor" / "no blood puddles." (the numbers in `_add_clutter`, kinder.gd)
+- "Make the monsters stand around longer." (`_idle_for = randf_range(1.5, 4.5)` in monster.gd)
+- "More creepy noises in the distance." (`_ambient_timer = randf_range(9.0, 22.0)` in spooky_audio.gd)
 - "Make the walls black and the floor lava." (colours at the top of kinder.gd)
 - "Make the drone go super fast." (`speed` in drone.gd)
 - "Make the robot red with a round head." (ROBOT DESIGN in robot.gd - you see it when you fly the drone)
