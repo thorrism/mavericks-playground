@@ -7,9 +7,11 @@ extends CharacterBody3D
 @export var rise_speed := 3.0       # how fast it goes up when you hold Space
 @export var sink_speed := 1.5       # how fast it drifts down when you don't
 @export var min_height := 0.6
-@export var max_height := 2.1       # walls are 2.5 tall, so it can't leave a room
+@export var max_height := 2.1       # lower than the walls, so it can't leave a room
 
 var active := false
+## Which way is "forward" (radians). First-person levels set this from the camera.
+var move_yaw := 0.0
 
 var _rotors: Array[Node3D] = []
 var _visual: Node3D
@@ -29,8 +31,9 @@ func _physics_process(delta: float) -> void:
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if input.length() < 0.1:
 		input = TouchControls.direction()
-	velocity.x = input.x * speed
-	velocity.z = input.y * speed
+	var direction := Vector3(input.x, 0.0, input.y).rotated(Vector3.UP, move_yaw)
+	velocity.x = direction.x * speed
+	velocity.z = direction.z * speed
 
 	if Input.is_action_pressed("jump") or TouchControls.jump_held():
 		velocity.y = rise_speed
@@ -41,7 +44,8 @@ func _physics_process(delta: float) -> void:
 	if global_position.y >= max_height and velocity.y > 0.0:
 		velocity.y = 0.0
 
-	# tilt a little in the direction we fly
+	# face the camera, tilt a little in the direction we fly
+	_visual.rotation.y = move_yaw
 	_visual.rotation.x = lerp(_visual.rotation.x, input.y * 0.35, 8.0 * delta)
 	_visual.rotation.z = lerp(_visual.rotation.z, -input.x * 0.35, 8.0 * delta)
 
@@ -66,8 +70,16 @@ func _build() -> void:
 	eye_mesh.height = 0.16
 	eye.mesh = eye_mesh
 	eye.material_override = _mat(Color("7ff7ff"), true)
-	eye.position = Vector3(0, 0, 0.22)
+	eye.position = Vector3(0, 0, -0.22)
 	_visual.add_child(eye)
+
+	# a small lamp so the drone lights up the floor under it in the dark
+	var lamp := OmniLight3D.new()
+	lamp.light_color = Color("7ff7ff")
+	lamp.light_energy = 1.2
+	lamp.omni_range = 5.0
+	lamp.position.y = -0.2
+	_visual.add_child(lamp)
 
 	for x in [-1.0, 1.0]:
 		for z in [-1.0, 1.0]:

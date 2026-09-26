@@ -14,10 +14,11 @@ The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
 ```
 ##########X#########      #  wall        T  toy        M  monster
 #..................#      W  low wall (drone only)     =  fence (jump over)
-#.T....M.........T.#      1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
+#.T....M....L....T.#      L  flickering lamp            1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
 ```
 
-So "add a monster in the top room" is literally typing one `M`. Best first prompts:
+So "add a monster in the top room" is literally typing one `M`. It's dark and first person:
+the scary knobs (`flashlight_*`, `fog_density`, colours) are right under the map. Best first prompts:
 
 ## Warm-up (30 seconds each) - change a letter, a number or a colour
 
@@ -25,10 +26,13 @@ So "add a monster in the top room" is literally typing one `M`. Best first promp
 - "Add another monster next to the start." (add an `M`)
 - "Make the monsters pink." / "Make the green monster GIANT." (`MONSTER_COLORS`, `height` in monster.gd)
 - "Make the monsters slower / faster." (`chase_speed` in monster.gd)
+- "Make the monster's eyes yellow / make them see you from further away." (`eye_color`, `see_distance`)
+- "Make it even darker" / "a bit brighter". (`flashlight_energy`, `fog_density`, `ambient_light_energy` in kinder.tscn)
+- "Make the lamps flicker like crazy" / "add a lamp in the start room." (`flicker` in lamp.gd, an `L` on the map)
 - "Make the walls black and the floor lava." (colours at the top of kinder.gd)
 - "Make the drone go super fast." (`speed` in drone.gd)
-- "Make the robot red with a round head." (ROBOT DESIGN in robot.gd)
-- "Change the monster's face - make it say 'Boo hoo!' when it catches me." (`caught_text`)
+- "Make the robot red with a round head." (ROBOT DESIGN in robot.gd - you see it when you fly the drone)
+- "Change what it says when the monster gets me." (`_on_caught` in kinder.gd)
 
 ## Small features (1-3 minutes)
 
@@ -45,11 +49,12 @@ So "add a monster in the top room" is literally typing one `M`. Best first promp
 
 - "Make a level 2 that loads after you escape." (a second `MAP`)
 - "Let me throw a toy to distract the monster."
-- "Give the drone a flashlight and make the rooms dark."
+- "Make the flashlight run out of battery - find batteries to recharge it."
 - "Add a friendly monster that follows you and blocks the mean ones."
 - "Add keys: a red key opens the red door instead of a button."
 - "Add a monster that only moves when you're not looking at it."
-- "Make the monster's eyes glow and play a scary (silly) sound when it sees you."
+- "Add hiding spots (lockers) the monster can't see into."
+- "Make the monster knock on the door before it comes in."
 
 ## The old arena is still there
 

@@ -41,3 +41,9 @@ material_override = SubResource("Material_ball")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("SphereShape3D_1")
+
+[node name="Glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+light_color = Color(1, 0.8, 0.4, 1)
+light_energy = 0.7
+omni_range = 3.5

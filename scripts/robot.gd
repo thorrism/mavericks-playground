@@ -29,6 +29,8 @@ enum HeadShape { BOX, BALL, CAN }
 
 ## False while you are flying the drone: the robot stands still and waits.
 var active := true
+## Which way is "forward" (radians). 0 = the map's up. First-person levels set this from the camera.
+var move_yaw := 0.0
 
 var _visual: Node3D
 var _left_arm: Node3D
@@ -59,7 +61,7 @@ func _physics_process(delta: float) -> void:
 		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 		if input.length() < 0.1:
 			input = TouchControls.direction()
-	var direction := Vector3(input.x, 0.0, input.y)
+	var direction := Vector3(input.x, 0.0, input.y).rotated(Vector3.UP, move_yaw)
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
 
@@ -92,6 +94,11 @@ func respawn() -> void:
 ## Make wherever the robot is right now the place it goes back to.
 func set_spawn_here() -> void:
 	_spawn_position = global_position
+
+
+## Hide the body (first-person view) or show it again.
+func set_body_visible(shown: bool) -> void:
+	_visual.visible = shown
 
 
 # ---------------------------------------------------------------------------
