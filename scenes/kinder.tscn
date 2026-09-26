@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/kinder.gd" id="1_kinder"]
 [ext_resource type="PackedScene" path="res://scenes/robot.tscn" id="2_robot"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/touch_controls.gd" id="4_touch"]
 [ext_resource type="Script" path="res://scripts/spooky_audio.gd" id="5_audio"]
 [ext_resource type="Script" path="res://scripts/blood_text.gd" id="6_blood"]
+[ext_resource type="Script" path="res://scripts/menu.gd" id="7_menu"]
 
 [sub_resource type="Shader" id="Shader_vignette"]
 code = "shader_type canvas_item;
@@ -66,6 +67,7 @@ spot_angle = 38.0
 spot_angle_attenuation = 1.2
 
 [node name="Audio" type="Node" parent="."]
+process_mode = 3
 script = ExtResource("5_audio")
 
 [node name="Robot" parent="." instance=ExtResource("2_robot")]
@@ -109,6 +111,17 @@ theme_override_constants/outline_size = 8
 theme_override_font_sizes/font_size = 40
 text = "Toys: 0/0"
 
+[node name="TimeLabel" type="Label" parent="HUD"]
+offset_left = 24.0
+offset_top = 66.0
+offset_right = 400.0
+offset_bottom = 100.0
+theme_override_colors/font_color = Color(0.8, 0.78, 0.7, 0.9)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 24
+text = "0:00"
+
 [node name="HelpLabel" type="Label" parent="HUD"]
 anchors_preset = 1
 anchor_left = 1.0
@@ -122,7 +135,7 @@ theme_override_colors/font_color = Color(1, 1, 1, 0.85)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 22
-text = "WASD move   Mouse look   Space jump   E drone   R restart   Esc mouse"
+text = "WASD move   Mouse look   Space jump   E drone   R restart   Esc pause"
 horizontal_alignment = 2
 
 [node name="MessageLabel" type="Label" parent="HUD"]
@@ -154,6 +167,11 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("6_blood")
+
+[node name="Menu" type="CanvasLayer" parent="."]
+process_mode = 3
+layer = 20
+script = ExtResource("7_menu")
 
 [node name="TouchControls" type="CanvasLayer" parent="."]
 script = ExtResource("4_touch")

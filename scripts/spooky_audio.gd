@@ -82,7 +82,7 @@ func _process(delta: float) -> void:
 
 func _footsteps(delta: float) -> void:
 	var players := get_tree().get_nodes_in_group("player")
-	if players.is_empty():
+	if players.is_empty() or get_tree().paused:   # the music keeps going on the menus; feet don't
 		return
 	var p: CharacterBody3D = players[0]
 	var on_floor := p.is_on_floor()

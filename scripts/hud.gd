@@ -9,6 +9,12 @@ extends CanvasLayer
 
 @onready var score_label: Label = $ScoreLabel
 @onready var message_label: Label = $MessageLabel
+@onready var time_label: Label = get_node_or_null("TimeLabel")     # "1:23 · normal", only in levels that have one
+@onready var help_label: Label = get_node_or_null("HelpLabel")     # controls; fades out once you're playing
+
+## Time since the run started. The level starts/stops it.
+var elapsed := 0.0
+var ticking := false
 
 var _fade: Tween
 
@@ -21,6 +27,32 @@ func _ready() -> void:
 	_on_score_changed(Game.score)
 	_on_collected_changed(Game.collected, Game.total_batteries)
 	show_message(intro_text)
+	if time_label:
+		time_label.text = ""
+
+
+func _process(delta: float) -> void:
+	if not ticking:
+		return
+	elapsed += delta
+	if time_label:
+		time_label.text = "%s  ·  %s" % [Settings.fmt_time(elapsed), Settings.NAMES[Settings.difficulty].to_lower()]
+
+
+func start_clock() -> void:
+	elapsed = 0.0
+	ticking = true
+	if help_label:
+		if TouchControls.is_touch():
+			help_label.text = "drag to look   joystick to move   II pause"
+		help_label.modulate.a = 1.0
+		var t := create_tween()
+		t.tween_interval(12.0)
+		t.tween_property(help_label, "modulate:a", 0.0, 2.0)
+
+
+func stop_clock() -> void:
+	ticking = false
 
 
 func _on_score_changed(score: int) -> void:

@@ -3,6 +3,8 @@ extends Control
 ## Call scare("RUN") and it does the rest.
 
 @export var font_size := 128
+@export var y_fraction := 0.42   # how far down the screen the letters sit
+@export var drip_length := 1.0   # 1 = long drips, 0.5 = half as long
 @export var color := Color(0.55, 0.02, 0.02)
 @export var shadow_color := Color(0.0, 0.0, 0.0, 0.85)
 
@@ -31,7 +33,7 @@ func scare(text: String, seconds := 2.8) -> void:
 	for ch in text:
 		total += _font.get_char_size(ch.unicode_at(0), fs).x
 	var x := (size.x - total) / 2.0
-	var y := size.y * 0.42
+	var y := size.y * y_fraction
 	for i in text.length():
 		var ch := text[i]
 		var w := _font.get_char_size(ch.unicode_at(0), fs).x
@@ -43,7 +45,7 @@ func scare(text: String, seconds := 2.8) -> void:
 			for _k in randi_range(1, 3):
 				_drips.append({
 					"x": x + w * randf_range(0.15, 0.85), "y": y + fs * 0.08, "len": 0.0,
-					"max": randf_range(60.0, 260.0) * fs / font_size, "speed": randf_range(140.0, 380.0),
+					"max": randf_range(60.0, 260.0) * drip_length * fs / font_size, "speed": randf_range(140.0, 380.0),
 					"w": randf_range(4.0, 11.0) * fs / font_size, "delay": i * 0.05 + randf_range(0.1, 0.6),
 				})
 		x += w

@@ -15,6 +15,11 @@ var score := 0
 var total_batteries := 0
 var collected := 0
 
+## Show the title screen when the level loads? True at boot and after an escape,
+## false after you get caught (straight back in - no menu between tries).
+var title_pending := true
+var last_result := ""   # "YOU ESCAPED in 1:23" for the title screen to show
+
 
 func reset_level(battery_count: int) -> void:
 	total_batteries = battery_count

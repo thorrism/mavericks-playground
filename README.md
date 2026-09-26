@@ -34,7 +34,8 @@ at the very top of the school.
 
 | Action | Mac keyboard | iPhone |
 |---|---|---|
-| Look around | mouse (Esc releases it, click the window to grab it again) | drag anywhere on screen |
+| Look around | mouse | drag anywhere on screen |
+| Pause / difficulty | Esc | the `II` button top-right |
 | Move | WASD or arrow keys (relative to where you look) | left joystick |
 | Jump / drone up | Space (hold to fly the drone up) | JUMP button |
 | Switch robot <-> drone | E | DRONE button |

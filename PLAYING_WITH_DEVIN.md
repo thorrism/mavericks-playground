@@ -20,7 +20,9 @@ The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
 
 So "add a bird in the top room" is literally typing one `O`. It's dark and first person:
 the scary knobs (`flashlight_*`, `fog_density`, wall colours, `scare_words`) are right under the map,
-and how hard the monsters are is at the top of `scripts/monster.gd`. Best first prompts:
+and how hard the monsters are is at the top of `scripts/monster.gd`. The title screen has
+EASY / NORMAL / NIGHTMARE (multipliers in `scripts/settings.gd`; it remembers your pick, your
+tries and your best escape time), Esc pauses. Best first prompts:
 
 ## Warm-up (30 seconds each) - change a letter, a number or a colour
 
@@ -29,6 +31,8 @@ and how hard the monsters are is at the top of `scripts/monster.gd`. Best first 
 - "Make the tall one pink." / "Make the bird's legs purple." (`color` per kind in `_apply_kind`, monster.gd)
 - "Make the monsters slower / faster / easier." (`chase_speed`, `see_distance`, `lose_after` in monster.gd)
 - "Give me more time to dodge" / "make Jumbo's swing reach further." (`windup_time`, `commit_before`, `swing_width`, `strike_range` in monster.gd's Attack group)
+- "Make EASY even easier" / "add an IMPOSSIBLE mode." (`TUNING`, `NAMES`, `BLURBS` in settings.gd)
+- "Call the game something else on the title screen." (`"KINDER ESCAPE"` in menu.gd)
 - "Make the button sound louder" / "make the door creak longer." (`click` and `door` in sfx.gd)
 - "Make them hear me from further away." (`hear_distance`)
 - "Let the bird follow me anywhere / through doors." (set that monster's `_room = -1` in monster.gd)
@@ -48,7 +52,7 @@ and how hard the monsters are is at the top of `scripts/monster.gd`. Best first 
 - "Make a secret room only the drone can get into." (surround it with `W`)
 - "Put the exit on the left side instead." (move the `X`)
 - "Make the monsters give up chasing sooner." (`see_distance`)
-- "Add a timer that counts how long the escape took."
+- "Show the best time on the screen while I play." (`time_label` in hud.gd, `Settings.best_time`)
 - "Make the toys spin faster and glow more."
 - "When you escape, show fireworks / say 'MAVERICK WINS!'."
 - "Put a fence maze in the middle room."
