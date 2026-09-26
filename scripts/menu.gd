@@ -1,7 +1,7 @@
 extends CanvasLayer
 ## The title screen and the pause menu (Esc), built in code. The game is frozen while
 ## it's up. Pick a difficulty here; it saves and applies straight away.
-##   Title:  KINDER ESCAPE in dripping blood, difficulty, PLAY, your records
+##   Title:  THE ABYSS in dripping blood, difficulty, PLAY, your records
 ##   Pause:  RESUME / RESTART / difficulty / QUIT
 ## Enter or Space = play/resume, Left/Right = change difficulty, Esc = back to the game.
 
@@ -67,7 +67,7 @@ func show_title(result := "") -> void:
 	_heading.visible = false
 	_title.visible = true
 	_gap.visible = true
-	_title.scare("KINDER ESCAPE", 1.0e9)
+	_title.scare("THE ABYSS", 1.0e9)
 	_result.text = result
 	_result.visible = result != ""
 	_tagline.visible = true

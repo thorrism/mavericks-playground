@@ -1,9 +1,9 @@
-# Robot Sandbox
+# The Abyss
 
 A tiny 3D game built with [Godot 4](https://godotengine.org) that runs on Mac **and** iPhone.
 It exists so a kid + a grown-up + Devin can say "make the robot green and add lava" and see it happen in seconds.
 
-## Kinder Escape (the current game)
+## The Abyss (the current game)
 
 First person. You wake up in a dark, abandoned kindergarten with only a flashlight. Three
 things live here and hunt you if they see or hear you. Find all six toys, use your drone to
@@ -76,7 +76,7 @@ Export templates go in `~/Library/Application Support/Godot/export_templates/4.7
 ## Where things live
 
 ```
-scenes/kinder.tscn      Kinder Escape: dark environment/fog, first-person camera + flashlight, HUD, fade, touch controls
+scenes/kinder.tscn      The Abyss: dark environment/fog, first-person camera + flashlight, HUD, fade, touch controls
 scripts/kinder.gd       THE MAP (text) + colours + scary knobs + builds walls/doors/buttons/toys/monsters/lamps
 scripts/monster.gd      the three monsters: behaviour knobs at the top, brain (A* paths, seeing/hearing), then the models
 scripts/lamp.gd         a flickering ceiling lamp (`L` on the map)

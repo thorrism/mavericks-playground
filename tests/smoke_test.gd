@@ -99,10 +99,10 @@ func _test_arena() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Kinder Escape (map, doors, buttons, drone, monsters, exit)
+# The Abyss (map, doors, buttons, drone, monsters, exit)
 # ---------------------------------------------------------------------------
 func _test_kinder() -> void:
-	print("Smoke test: kinder escape")
+	print("Smoke test: the abyss")
 	var level: Node3D = load("res://scenes/kinder.tscn").instantiate()
 	root.add_child(level)
 	await process_frame
@@ -307,7 +307,7 @@ func _test_kinder() -> void:
 	monster._hunt_timer = 0.0
 	monster._search_timer = 0.0
 	monster._visual.rotation.y = PI
-	await _settle(2)
+	await _settle(4)
 	monster.set_physics_process(false)
 	_check(not level.hiding and not monster._busted, "out of the cupboard: not hiding any more")
 

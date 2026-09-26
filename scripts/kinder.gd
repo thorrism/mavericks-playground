@@ -1,5 +1,5 @@
 extends Node3D
-## KINDER ESCAPE - a dark, abandoned kindergarten you have to escape from. First person.
+## THE ABYSS - a dark, abandoned kindergarten you have to escape from. First person.
 ## You have a flashlight. THEY have very good eyes - and they know the way around.
 ## The whole level is drawn with the text map below. Edit the map = edit the level!
 ##

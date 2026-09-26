@@ -7,7 +7,7 @@ every prompt below is a 1-3 minute change so nobody gets bored waiting.
 **Tip for Devin:** always `make test && make run`, take a screenshot (`screencapture`), and
 attach it. Kids want to *see* it. Keep the code in the existing files; no new systems unless asked.
 
-## Kinder Escape - the level is a text map
+## The Abyss - the level is a text map
 
 The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
 
@@ -33,7 +33,7 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 - "Make the monsters slower / faster / easier." (`chase_speed`, `see_distance`, `lose_after` in monster.gd)
 - "Give me more time to dodge" / "make Jumbo's swing reach further." (`windup_time`, `commit_before`, `swing_width`, `strike_range` in monster.gd's Attack group)
 - "Make EASY even easier" / "add an IMPOSSIBLE mode." (`TUNING`, `NAMES`, `BLURBS` in settings.gd)
-- "Call the game something else on the title screen." (`"KINDER ESCAPE"` in menu.gd)
+- "Call the game something else on the title screen." (`"THE ABYSS"` in menu.gd)
 - "Make the button sound louder" / "make the door creak longer." (`click` and `door` in sfx.gd)
 - "Make them hear me from further away." (`hear_distance`)
 - "Let the bird follow me anywhere / through doors." (set that monster's `_room = -1` in monster.gd)
