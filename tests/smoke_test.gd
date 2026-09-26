@@ -315,6 +315,8 @@ func _test_kinder() -> void:
 	var near_front: Dictionary = level.nearest_cupboard(hide_pos + facing * 1.0, 3.5)
 	_check(not near_front.is_empty() and near_front["cell"] == hide_cell and level.cupboard_at(hide_pos) == hide_cell
 		and level.cupboard_at(start) == Vector2i(-1, -1), "the level knows which cupboard is nearest / which one you're in")
+	var none_ok := func(_front: Vector3) -> bool: return false
+	_check(level.nearest_cupboard(hide_pos, 3.5, none_ok).is_empty(), "nearest_cupboard skips cupboards the caller rejects")
 	var found := [0]
 	game.found.connect(func(_by): found[0] += 1)
 	monster._home = hide_pos + facing * 7.0

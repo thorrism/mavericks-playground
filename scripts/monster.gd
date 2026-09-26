@@ -362,7 +362,7 @@ func _physics_process(delta: float) -> void:
 		_retarget_in -= delta
 		_target = _check["front"]
 		if _flat_distance(_target) < 0.9:
-			_peek_timer = peek_time
+			_peek_timer = maxf(peek_time, 0.05)
 			_play(_step_sound, _step_db + 2.0, 0.7)
 			if _level.has_method("fling_cupboard"):
 				_level.fling_cupboard(_check["cell"])
@@ -724,8 +724,8 @@ func _pick_wander_target() -> void:
 func _consider_cupboard() -> void:
 	if _busted or _level == null or not _level.has_method("nearest_cupboard") or check_cupboard_range <= 0.0:
 		return
-	var c: Dictionary = _level.nearest_cupboard(_last_seen, check_cupboard_range)
-	if c.is_empty() or c["cell"] == _checked or not _in_my_room(c["front"]):
+	var c: Dictionary = _level.nearest_cupboard(_last_seen, check_cupboard_range, _in_my_room)
+	if c.is_empty() or c["cell"] == _checked:
 		return
 	_check = c
 	_checked = c["cell"]

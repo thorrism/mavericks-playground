@@ -555,16 +555,20 @@ func is_hidden(pos: Vector3) -> bool:
 
 ## The cupboard closest to pos, or an empty Dictionary if none is within max_dist:
 ##   { "cell": Vector2i, "front": Vector3 (the floor just outside its doors), "inside": Vector3 }
-func nearest_cupboard(pos: Vector3, max_dist: float) -> Dictionary:
+func nearest_cupboard(pos: Vector3, max_dist: float, front_ok: Callable = Callable()) -> Dictionary:
 	var best := {}
 	var best_dist := max_dist
 	for cell: Vector2i in _cupboards:
 		var inside := _tile_pos(cell.y, cell.x)
 		var d := Vector2(inside.x - pos.x, inside.z - pos.z).length()
-		if d <= best_dist:
-			best_dist = d
-			var open: Vector3 = _cupboards[cell]
-			best = {"cell": cell, "front": inside + open * TILE, "inside": inside}
+		if d > best_dist:
+			continue
+		var open: Vector3 = _cupboards[cell]
+		var front := inside + open * TILE
+		if front_ok.is_valid() and not front_ok.call(front):
+			continue
+		best_dist = d
+		best = {"cell": cell, "front": front, "inside": inside}
 	return best
 
 
