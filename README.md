@@ -39,7 +39,7 @@ at the very top of the school.
 | Move | WASD or arrow keys (relative to where you look) | left joystick |
 | Jump / drone up | Space (hold to fly the drone up) | JUMP button |
 | Switch robot <-> drone | E | DRONE button |
-| Restart | R | - |
+| Restart | Esc -> RESTART | `II` -> RESTART |
 
 Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
 (`flashlight_*`, `fog_density`, wall colours, the scare words) and `scripts/monster.gd`

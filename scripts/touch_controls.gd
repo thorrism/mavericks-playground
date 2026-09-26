@@ -53,6 +53,20 @@ func _input(event: InputEvent) -> void:
 		_look_delta += event.relative
 
 
+## Forget every finger currently on the screen (called when a menu takes over the input).
+static func release_all() -> void:
+	if _instance == null:
+		return
+	_instance._joy_touch_index = -1
+	_instance._joy_vector = Vector2.ZERO
+	_instance._joy_knob.position = (_instance._joy_base.size - _instance._joy_knob.size) / 2.0
+	_instance._look_touch_index = -1
+	_instance._look_delta = Vector2.ZERO
+	_instance._jump_queued = false
+	_instance._jump_held = false
+	_instance._drone_queued = false
+
+
 func _over_button(pos: Vector2) -> bool:
 	for child in get_children():
 		if child is Button and child.get_global_rect().has_point(pos):

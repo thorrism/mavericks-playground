@@ -135,7 +135,7 @@ theme_override_colors/font_color = Color(1, 1, 1, 0.85)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 22
-text = "WASD move   Mouse look   Space jump   E drone   R restart   Esc pause"
+text = "WASD move   Mouse look   Space jump   E drone   Esc pause / restart"
 horizontal_alignment = 2
 
 [node name="MessageLabel" type="Label" parent="HUD"]

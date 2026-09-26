@@ -157,6 +157,7 @@ func _ready() -> void:
 		menu.show_title.call_deferred(Game.last_result)
 		Game.last_result = ""
 	else:
+		menu.hide_menu()
 		_begin_run()
 
 

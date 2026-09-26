@@ -36,6 +36,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if Input.is_action_just_pressed("restart"):
+		get_tree().reload_current_scene()
+		return
 	var target := robot.global_position + camera_offset
 	camera.global_position = camera.global_position.lerp(target, camera_follow_speed * delta)
 	camera.look_at(robot.global_position + Vector3.UP * 0.5)

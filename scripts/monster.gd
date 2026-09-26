@@ -150,6 +150,7 @@ func _ready() -> void:
 ## The difficulty picked on the title screen scales the numbers from _apply_kind (see Settings.TUNING).
 func _apply_difficulty() -> void:
 	var t: Dictionary = Settings.monster_tuning()
+	var old_grace := spawn_grace
 	wander_speed = _base_wander_speed * t["speed"]
 	chase_speed = _base_chase_speed * t["speed"]
 	see_distance = _base_see_distance * t["sight"]
@@ -160,6 +161,8 @@ func _apply_difficulty() -> void:
 	lose_after = _base_lose_after * t["persist"]
 	search_time = _base_search_time * t["persist"]
 	spawn_grace = _base_spawn_grace * t["grace"]
+	if _grace > 0.0 and old_grace > 0.0:
+		_grace = _grace / old_grace * spawn_grace
 
 
 func _apply_kind() -> void:
