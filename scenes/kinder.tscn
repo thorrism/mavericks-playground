@@ -1,10 +1,26 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/kinder.gd" id="1_kinder"]
 [ext_resource type="PackedScene" path="res://scenes/robot.tscn" id="2_robot"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="3_hud"]
 [ext_resource type="Script" path="res://scripts/touch_controls.gd" id="4_touch"]
 [ext_resource type="Script" path="res://scripts/spooky_audio.gd" id="5_audio"]
+[ext_resource type="Script" path="res://scripts/blood_text.gd" id="6_blood"]
+
+[sub_resource type="Shader" id="Shader_vignette"]
+code = "shader_type canvas_item;
+// Dark red creeping in from the edges. strength 0 = nothing, 1 = you're about to die.
+uniform float strength : hint_range(0.0, 1.0) = 0.0;
+
+void fragment() {
+	vec2 d = UV - vec2(0.5);
+	float v = smoothstep(0.12, 0.72, length(d) * 1.35);
+	COLOR = vec4(0.45, 0.0, 0.0, v * strength);
+}"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_vignette"]
+shader = SubResource("Shader_vignette")
+shader_parameter/strength = 0.0
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -49,7 +65,7 @@ spot_range = 18.0
 spot_angle = 38.0
 spot_angle_attenuation = 1.2
 
-[node name="Audio" type="AudioStreamPlayer" parent="."]
+[node name="Audio" type="Node" parent="."]
 script = ExtResource("5_audio")
 
 [node name="Robot" parent="." instance=ExtResource("2_robot")]
@@ -62,6 +78,16 @@ counter_mode = "count"
 count_word = "Toys"
 intro_text = "Find the 6 toys.  Don't let them find you."
 win_text = "All toys found.  The golden door is open.  RUN."
+
+[node name="Vignette" type="ColorRect" parent="HUD"]
+material = SubResource("ShaderMaterial_vignette")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
 
 [node name="Fade" type="ColorRect" parent="HUD"]
 anchors_preset = 15
@@ -119,6 +145,15 @@ text = "Find the toys."
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
+
+[node name="BloodText" type="Control" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_blood")
 
 [node name="TouchControls" type="CanvasLayer" parent="."]
 script = ExtResource("4_touch")

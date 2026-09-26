@@ -5,6 +5,8 @@ extends StaticBody3D
 @export var size := Vector3(2.0, 2.8, 0.4)
 @export var locked_symbol := "?"
 
+signal opened
+
 var is_open := false
 var _mesh: MeshInstance3D
 var _shape: CollisionShape3D
@@ -50,5 +52,6 @@ func open() -> void:
 		return
 	is_open = true
 	_shape.set_deferred("disabled", true)
+	opened.emit()
 	var tween := create_tween()
 	tween.tween_property(_mesh, "position:y", size.y * 1.5 + 0.2, 0.8).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
