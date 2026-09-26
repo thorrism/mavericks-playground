@@ -14,13 +14,18 @@ at the very top of the school.
 - Grimy **coloured walls** with stripes, torn posters, bloody handprints and words scrawled on them.
 - Step on a **button** (or land the drone on it) and the door of the same colour opens.
 - **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
-- Three **monsters** (map letters `M`, `J`, `O`): a tall teal grinning thing with a bow tie, a huge green
-  brute, and a lanky yellow bird - one per room. They know the way around walls, run to where they
-  last saw you and search there - but you are a bit faster, and **a monster never leaves its own
-  room**: get through a doorway and it gives up. They also leave you alone for the first few seconds
-  after a (re)start.
-- **Seen**: dripping blood letters, a scream, red screen edges, shaking, your flashlight stutters,
-  and the music turns into panic. **Caught**: red flash, black, and the level starts over.
+- Two **monsters** (map letters `M` = Banbo, a tall teal grinning thing with a bow tie, and `J` = Jumbo,
+  a huge green brute; `O` adds a lanky yellow bird if you want one) - one per room. They really walk
+  (knees bend, feet plant, they lean into a run), know the way around walls, run to where they last
+  saw you and search there - but you are a bit faster, and **a monster never leaves its own room**:
+  get through a doorway and it gives up. They also leave you alone for the first few seconds after a (re)start.
+- **Seen**: dripping blood letters (`BANBO SEES YOU`), a scream, red screen edges, shaking, your
+  flashlight stutters, and the music turns into panic.
+- **The swing**: touching a monster doesn't kill you. When it gets close it snarls and raises both
+  arms - that is your warning - then slams them down and lunges. Sidestep out of the arc and it
+  misses (`JUMBO MISSED YOU`) and is stuck for a moment; stand there and it lands: red flash, black,
+  and the level starts over.
+- Buttons clunk when pressed and doors grind open, so you can hear that something happened.
 - Collect every toy and the **golden door** opens and glows; walk through it to escape.
 - All sound is generated from code: footsteps (yours and theirs, heavier when they chase), a toy chime,
   a broken music-box tune, the drone's rotor whine, and each monster's own voice.

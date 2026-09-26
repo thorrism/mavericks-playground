@@ -1,5 +1,6 @@
 extends StaticBody3D
-## A coloured sliding door. Call open() and it slides up out of the way.
+## A coloured sliding door. Call open() and it grinds up out of the way (you can hear it
+## from across the school, so you know a button did something).
 
 @export var color := Color("ff5a5a")
 @export var size := Vector3(2.0, 2.8, 0.4)
@@ -52,6 +53,15 @@ func open() -> void:
 		return
 	is_open = true
 	_shape.set_deferred("disabled", true)
+	var sound := AudioStreamPlayer3D.new()
+	sound.name = "OpenSound"
+	sound.stream = Sfx.get_sound("door")
+	sound.unit_size = 10.0
+	sound.max_distance = 80.0
+	sound.volume_db = 4.0
+	sound.position.y = size.y / 2.0
+	sound.autoplay = true
+	add_child(sound)
 	opened.emit()
 	var tween := create_tween()
 	tween.tween_property(_mesh, "position:y", size.y * 1.5 + 0.2, 0.8).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

@@ -10,6 +10,8 @@ extends RefCounted
 ##   panic         chase music (loops)   drone    rotor whine (loops)
 ##   stomp / thud / clack   monster footsteps (giant / tall one / bird)
 ##   growl / giggle / caw   monster voices (giant / tall one / bird)
+##   snarl         a monster winding up to swing    whoosh   the swing itself
+##   click         a floor button clunking down     door     a door grinding open
 
 const RATE := 22050
 
@@ -56,6 +58,14 @@ static func _make(sound_name: String) -> AudioStreamWAV:
 			return _giggle()
 		"caw":
 			return _caw()
+		"snarl":
+			return _snarl()
+		"whoosh":
+			return _whoosh()
+		"click":
+			return _click()
+		"door":
+			return _door()
 	push_warning("Sfx: no sound called '%s'" % sound_name)
 	return _wav(PackedFloat32Array([0.0]))
 
@@ -350,6 +360,92 @@ static func _caw() -> AudioStreamWAV:
 		var env := minf(t / 0.04, 1.0) * (1.0 if t < 0.5 else 1.0 - (t - 0.5) / 0.25)
 		out[i] = s * env
 	return _wav(_normalize(out, 0.85))
+
+
+## Winding up: a sharp breath in, then a rising snarl that breaks up as it peaks.
+static func _snarl() -> AudioStreamWAV:
+	var rng := _rng(51)
+	var n := int(RATE * 0.7)
+	var out := _silence(n)
+	var breath_lp := _LowPass.new(2500.0)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		# the breath: hissy noise that swells and stops
+		var breath := breath_lp.next(rng.randf_range(-1.0, 1.0)) * (sin(minf(t / 0.2, 1.0) * PI) if t < 0.2 else 0.0) * 0.5
+		# the snarl: rises from 90 to 240 Hz, buzzing harder and harder
+		var k := clampf((t - 0.12) / 0.5, 0.0, 1.0)
+		phase += lerpf(90.0, 240.0, k * k) / RATE
+		var s := 0.0
+		for h in 7:
+			s += sin(TAU * phase * (h + 1)) / (h + 1)
+		s *= 0.5 + 0.5 * sin(TAU * lerpf(18.0, 40.0, k) * t)
+		s = clampf(s * (1.0 + k * 2.5), -1.0, 1.0)   # distorts as it gets louder
+		var env := 0.0 if t < 0.12 else minf((t - 0.12) / 0.08, 1.0) * (1.0 if t < 0.62 else 1.0 - (t - 0.62) / 0.08)
+		out[i] = breath + s * env * 0.8
+	return _wav(_normalize(out, 0.95))
+
+
+## The swing: a fast whoosh of air, high to low.
+static func _whoosh() -> AudioStreamWAV:
+	var rng := _rng(52)
+	var n := int(RATE * 0.3)
+	var out := _silence(n)
+	var lp := _LowPass.new(2800.0)
+	var hp_state := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var noise := lp.next(rng.randf_range(-1.0, 1.0))
+		hp_state += (noise - hp_state) * lerpf(0.9, 0.05, t / 0.3)   # sweeps from bright to dull
+		var env := sin(clampf(t / 0.3, 0.0, 1.0) * PI)
+		out[i] = (noise - hp_state * 0.6) * env * env
+	return _wav(_normalize(out, 0.85))
+
+
+## A floor button: a heavy mechanical click, then a deeper clunk as it seats.
+static func _click() -> AudioStreamWAV:
+	var rng := _rng(53)
+	var n := int(RATE * 0.35)
+	var out := _silence(n)
+	var lp := _LowPass.new(3500.0)
+	for i in n:
+		var t := float(i) / RATE
+		var s := lp.next(rng.randf_range(-1.0, 1.0)) * exp(-t * 90.0) * 1.5
+		s += sin(TAU * 1800.0 * t) * exp(-t * 120.0) * 0.6
+		if t > 0.09:
+			var p := t - 0.09
+			s += sin(TAU * 110.0 * p) * exp(-p * 30.0) * 1.2
+			s += lp.next(rng.randf_range(-1.0, 1.0)) * exp(-p * 60.0) * 0.6
+		out[i] = s
+	return _wav(_normalize(out, 0.9))
+
+
+## A door opening: a grinding metal scrape rising up, then a heavy clunk when it stops.
+static func _door() -> AudioStreamWAV:
+	var rng := _rng(54)
+	var n := int(RATE * 1.2)
+	var out := _silence(n)
+	var lp := _LowPass.new(1200.0)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var s := 0.0
+		if t < 0.85:
+			# the grind: buzzy sawtooth-ish tone sliding upward with rattling noise
+			phase += lerpf(70.0, 130.0, t / 0.85) / RATE
+			var buzz := 0.0
+			for h in 9:
+				buzz += sin(TAU * phase * (h + 1)) / (h + 1)
+			buzz *= 0.6 + 0.4 * sin(TAU * 31.0 * t)
+			var env := minf(t / 0.1, 1.0) * (1.0 if t < 0.7 else 1.0 - (t - 0.7) / 0.15)
+			s = (buzz * 0.5 + lp.next(rng.randf_range(-1.0, 1.0)) * 0.5) * env
+		if t > 0.8:
+			# the clunk at the top
+			var p := t - 0.8
+			s += sin(TAU * lerpf(90.0, 55.0, p / 0.4) * p) * exp(-p * 9.0) * 1.3
+			s += lp.next(rng.randf_range(-1.0, 1.0)) * exp(-p * 25.0) * 0.8
+		out[i] = s
+	return _wav(_normalize(out, 0.9))
 
 
 # ---------------------------------------------------------------------------

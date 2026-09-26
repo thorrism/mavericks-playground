@@ -8,6 +8,7 @@ signal all_collected
 signal message(text: String, seconds: float)
 signal caught(by: Node3D)
 signal spotted(by: Node3D)
+signal missed(by: Node3D)
 signal collected_one
 
 var score := 0
@@ -47,3 +48,8 @@ func player_caught(by: Node3D) -> void:
 ## A monster just noticed the player.
 func player_spotted(by: Node3D) -> void:
 	spotted.emit(by)
+
+
+## A monster swung at the player and hit nothing but floor.
+func player_missed(by: Node3D) -> void:
+	missed.emit(by)

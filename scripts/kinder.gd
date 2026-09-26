@@ -7,7 +7,7 @@ extends Node3D
 ##   W  low wall (only the drone can fly over it)
 ##   =  fence (you can jump over it - THEY just step over it)
 ##   T  toy to collect                         X  exit door (opens when all toys are found)
-##   M  the tall one (Banban-ish)   J  the giant (Jumbo Josh-ish)   O  the bird (Opila-ish)
+##   M  the tall one (Banban-ish)   J  the giant (Jumbo Josh-ish)   O  the bird (Opila-ish, not used right now)
 ##   L  a flickering ceiling lamp
 ##   1 2 3  doors         a b c  buttons       button a opens door 1, b opens 2, c opens 3
 ##
@@ -30,7 +30,7 @@ const MAP: Array[String] = [
 	"#....W.#.....P.....#",
 	"#WWWWW.#.....L.....#",
 	"#......#..T........#",
-	"#..T...#.........O.#",
+	"#..T...#...........#",
 	"####################",
 ]
 
@@ -77,7 +77,8 @@ const FENCE_LAYER := 2
 @export var mouse_sensitivity := 0.0025
 @export var touch_sensitivity := 0.006
 @export var eye_height := 1.5
-@export var scare_words: Array[String] = ["RUN", "IT SEES YOU", "DON'T LOOK BACK", "RUN RUN RUN", "IT'S COMING"]
+## NAME becomes the monster's name ("BANBO SEES YOU").
+@export var scare_words: Array[String] = ["RUN", "NAME SEES YOU", "NAME SEES YOU", "DON'T LOOK BACK", "RUN RUN RUN", "NAME IS COMING"]
 
 @onready var robot: CharacterBody3D = $Robot
 @onready var camera: Camera3D = $Camera3D
@@ -116,6 +117,7 @@ func _ready() -> void:
 	Game.all_collected.connect(_on_all_toys_found)
 	Game.caught.connect(_on_caught)
 	Game.spotted.connect(_on_spotted)
+	Game.missed.connect(_on_missed)
 
 	robot.collision_mask |= 1 << (FENCE_LAYER - 1)
 	drone = CharacterBody3D.new()
@@ -274,9 +276,23 @@ func _on_spotted(monster: Node3D) -> void:
 	_scare_flash = 1.0
 	_flicker = 0.7
 	var words: String = scare_words[randi() % scare_words.size()]
-	if "kind_name" in monster and randf() < 0.3:
-		words = monster.kind_name.to_upper() + " SEES YOU"
-	blood_text.scare(words)
+	blood_text.scare(words.replace("NAME", _name_of(monster)))
+
+
+## It swung and hit the floor next to you: a jolt, and its name in blood.
+func _on_missed(monster: Node3D) -> void:
+	if _caught or _escaped:
+		return
+	_shake = maxf(_shake, 0.8)
+	_scare_flash = maxf(_scare_flash, 0.6)
+	blood_text.scare("%s MISSED YOU" % _name_of(monster), 1.6)
+	Game.say("%s missed!  Keep moving!" % _name_of(monster).capitalize(), 1.5)
+
+
+func _name_of(monster: Node3D) -> String:
+	if "kind_name" in monster:
+		return String(monster.kind_name).to_upper()
+	return "IT"
 
 
 ## A monster got you: freeze, stare at it, red flash, black... and the whole level starts over.
@@ -291,7 +307,7 @@ func _on_caught(monster: Node3D) -> void:
 	var to_monster := monster.global_position - robot.global_position
 	_yaw = atan2(-to_monster.x, -to_monster.z)
 	_pitch = 0.35
-	blood_text.scare("IT GOT YOU", 2.2)
+	blood_text.scare("%s GOT YOU" % _name_of(monster), 2.2)
 	fade.color = Color(0.5, 0.0, 0.0, 1.0)
 	fade.modulate.a = 0.0
 	var tween := create_tween()

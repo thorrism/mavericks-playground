@@ -111,7 +111,11 @@ func _test_kinder() -> void:
 	var kinds := {}
 	for m in monsters:
 		kinds[m.kind] = true
-	_check(kinds.size() == 3, "all three monster kinds are in the level (%d kinds)" % kinds.size())
+	_check(kinds.size() == 2 and not kinds.has(2), "the tall one and the giant are in the level, the bird is not (%d kinds)" % kinds.size())
+	var shares_start := false
+	for m in monsters:
+		shares_start = shares_start or level.room_at(m.global_position) == level.room_at(robot.global_position)
+	_check(not shares_start, "no monster shares the start room with you")
 	var tall: CharacterBody3D
 	var giant: CharacterBody3D
 	for m in monsters:
@@ -122,6 +126,7 @@ func _test_kinder() -> void:
 			"%s has glowing eyes and its own 3D sound" % m.kind_name)
 		var top: float = m.model_top()
 		_check(top > 2.0 and top < level.WALL_HEIGHT - 0.1, "%s fits under the ceiling (top=%.2f m)" % [m.kind_name, top])
+		_check(m._left_knee != null and m._left_knee.get_parent() == m._left_leg, "%s has legs that bend at the knee" % m.kind_name)
 		if m.kind == 0:
 			tall = m
 		elif m.kind == 1:
@@ -130,6 +135,9 @@ func _test_kinder() -> void:
 	_check(level.get_node("Audio").get_child_count() >= 5, "level audio has hum, music, footsteps and effects players")
 	_check(Sfx.get_sound("chime").data.size() > 1000 and Sfx.get_sound("step0").data.size() > 1000 and Sfx.get_sound("scream").data.size() > 1000,
 		"generated sounds have data")
+	_check(Sfx.get_sound("click").data.size() > 1000 and Sfx.get_sound("door").data.size() > 1000
+		and Sfx.get_sound("snarl").data.size() > 1000 and Sfx.get_sound("whoosh").data.size() > 1000,
+		"button, door, snarl and whoosh sounds have data")
 	_check(get_nodes_in_group("monster").size() == monsters.size(), "monsters registered")
 	var labels := world.find_children("*", "Label3D", true, false)
 	_check(labels.size() >= 3, "%d words scrawled on the walls" % labels.size())
@@ -178,6 +186,7 @@ func _test_kinder() -> void:
 	robot.global_position = button_a.global_position + Vector3(0, 0.3, 0)
 	await _settle(10)
 	_check(button_a.is_pressed and door1.is_open, "stepping on button a opens door 1")
+	_check(button_a.has_node("ClickSound") and door1.has_node("OpenSound"), "...with a click from the button and a grinding sound from the door")
 
 	# drone: E toggles it on, it can rise, and it presses button c
 	var drone: CharacterBody3D = level.get_node("Drone")
@@ -264,22 +273,60 @@ func _test_kinder() -> void:
 	var vignette: ColorRect = level.get_node("HUD/Vignette")
 	_check(monster.chasing and spotted[0] >= 1, "monster spots you and starts hunting")
 	_check(blood._text != "" and blood._letters.size() > 0, "bloody letters on screen: '%s'" % blood._text)
+	_check(blood._text.contains("BANBO") or not blood._text.contains("IT "), "the letters use its name, not 'it'")
+	var leg_before: float = monster._left_leg.rotation.x
 	await _settle(30)
 	_check(vignette.material.get_shader_parameter("strength") > 0.1, "red creeps in from the screen edges while hunted")
 	_check(monster.global_position.distance_to(robot.global_position) < 5.0, "...and it closes in (%.1fm away)" % monster.global_position.distance_to(robot.global_position))
+	_check(absf(monster._left_leg.rotation.x - leg_before) > 0.05 or absf(monster._left_leg.rotation.x) > 0.1, "its legs swing as it walks (hip=%.2f)" % monster._left_leg.rotation.x)
+	_check(monster._stride_phase > 1.0, "the walk cycle follows the distance it really moved (phase=%.1f)" % monster._stride_phase)
 
 	# collect one toy so we can see the restart wipe it
 	robot.global_position = toys[0].global_position
 	await _settle(5)
 	_check(game.collected == 1, "one toy collected before dying")
 
-	# a monster catching the robot: jump-scare (frozen, screen goes dark), then the LEVEL RESTARTS
+	# touching a monster is not death: it has to WIND UP and SWING, and you can dodge it
+	var missed := [0]
+	game.missed.connect(func(_by): missed[0] += 1)
 	monster._cooldown = 0.0
 	monster._room = -1   # let it roam anywhere for this bit
-	monster.global_position = robot.global_position + Vector3(0.5, 0, 0)
-	await _settle(5)
+	monster.chasing = true
+	monster._hunt_timer = 10.0
+	monster.global_position = robot.global_position + Vector3(0, 0, 1.6)
+	monster._visual.rotation.y = PI   # facing the robot
+	await _settle(3)
+	_check(monster.attack == monster.Attack.WINDUP and not level._caught, "in reach: it winds up (arms go high) instead of grabbing you on touch")
+	await _settle(8)
+	_check(monster._left_arm.rotation.x < -1.5 and not level._caught, "arms are up over its head during the wind-up (%.2f)" % monster._left_arm.rotation.x)
+	# dodge: get well out of the way before the arms come down
+	robot.global_position += Vector3(4.0, 0, 0)
+	var frames := 0
+	while monster.attack != monster.Attack.RECOVER and frames < 120:
+		await physics_frame
+		frames += 1
+	_check(monster.attack == monster.Attack.RECOVER and not level._caught, "it swings and MISSES when you've moved away")
+	_check(missed[0] == 1 and blood._text.contains("MISSED") and blood._text.contains("BANBO"), "'BANBO MISSED YOU' in blood (%s)" % blood._text)
+	frames = 0
+	while monster.attack != monster.Attack.NONE and frames < 200:
+		await physics_frame
+		frames += 1
+	_check(monster.attack == monster.Attack.NONE and frames > 20, "...and it is stuck recovering for a moment (%d frames)" % frames)
+
+	# stand still in front of it: the swing lands, jump-scare (frozen, screen goes dark), then the LEVEL RESTARTS
+	monster._cooldown = 0.0
+	monster.chasing = true
+	monster._hunt_timer = 10.0
+	monster.global_position = robot.global_position + Vector3(0, 0, 1.6)
+	monster._visual.rotation.y = PI
+	frames = 0
+	while not level._caught and frames < 120:
+		await physics_frame
+		frames += 1
+	await _settle(3)
 	var fade: ColorRect = level.get_node("HUD/Fade")
-	_check(level._caught and not robot.active and fade.modulate.a > 0.1, "monster grabs you: frozen + screen flashes")
+	_check(level._caught and not robot.active and fade.modulate.a > 0.1, "stay put and the swing lands: frozen + screen flashes")
+	_check(blood._text.contains("BANBO") and blood._text.contains("GOT YOU"), "'BANBO GOT YOU' in blood (%s)" % blood._text)
 	await create_timer(3.0).timeout
 	await _settle(5)
 	_check(not is_instance_valid(level) or level.is_queued_for_deletion(), "...then the old level is thrown away")

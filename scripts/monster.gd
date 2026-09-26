@@ -7,23 +7,36 @@ extends CharacterBody3D
 ## walking close by, it hunts you: it knows the way around walls, goes to where it last saw
 ## you, searches around there, and only gives up after a while. But each one is tied to the
 ## room it was born in - it can't follow you through a doorway, so a door is always an escape.
+## Touching one doesn't hurt. When it gets close it WINDS UP (arms go high, it roars), then
+## SLAMS down in front of it - step out of the way and it misses, and it's stuck for a moment.
 
 enum Kind { TALL_ONE, GIANT, BIRD }
+enum Attack { NONE, WINDUP, STRIKE, RECOVER }
 
 @export var kind := Kind.TALL_ONE
 
 @export_group("Behaviour (set per kind in _apply_kind, tweak here to override)")
 @export var wander_speed := 1.8
 @export var chase_speed := 4.6         # the robot runs at 7, so you can outrun it
+@export var accel := 14.0              # how fast it gets up to speed / stops (heavier = smaller)
+@export var turn_rate := 5.0           # radians per second it can turn while walking
 @export var see_distance := 9.0        # how far it can spot you
 @export var see_angle := 100.0         # degrees: how wide its eyes look (360 = all round)
 @export var hear_distance := 3.0       # you walking this close = it comes to look
 @export var wander_radius := 8.0       # how far it strolls from home
-@export var catch_distance := 1.5
 @export var lose_after := 2.0          # seconds it keeps going for your last spot after losing you
 @export var search_time := 4.0         # ...then how long it searches around there
 @export var spawn_grace := 4.0         # seconds after the level starts before it will notice you
 @export var gravity := 22.0
+
+@export_group("Attack")
+@export var strike_range := 2.4        # it starts its swing when you're this close, in front of it
+@export var strike_arc := 60.0         # degrees: how wide the swing is - sidestep out of this to dodge
+@export var windup_time := 0.55        # seconds of arms-up warning before the swing (your time to move)
+@export var strike_time := 0.18        # how long the swing itself takes
+@export var recover_time := 1.0        # seconds it is stuck after a swing
+@export var lunge := 1.0               # metres it throws itself forward during the swing
+@export var track_rate := 1.5          # radians/s it can turn while winding up (you can sidestep faster)
 
 ## Nothing may poke through the ceiling (walls are 3 m).
 const MAX_TOP := 2.8
@@ -48,12 +61,22 @@ var _grace := 0.0
 var _time := 0.0
 var _voice_in := 4.0
 var _stride_phase := 0.0
-var _last_swing := 0.0
+var _last_step := 0
+var _arm_pose := 0.0     # 0 = arms swinging normally .. 1 = fully in the attack pose
+var _arm_target := 0.0   # where the arms are heading (radians on x) while attacking
+var _lean := 0.0
+
+## Attack state: what it's doing with its arms right now, and for how much longer.
+var attack := Attack.NONE
+var _attack_timer := 0.0
+var _strike_dir := Vector3.FORWARD
 
 var _visual: Node3D
 var _head: Node3D
 var _left_leg: Node3D
 var _right_leg: Node3D
+var _left_knee: Node3D
+var _right_knee: Node3D
 var _left_arm: Node3D
 var _right_arm: Node3D
 var _jaw: Node3D
@@ -61,10 +84,14 @@ var _audio: AudioStreamPlayer3D
 
 # per-kind looks/sounds
 var _height := 3.3
-var _swing_walk := 4.0
-var _swing_run := 11.0
+var _leg_h := 1.3
+var _step_len := 1.4       # metres one foot travels per step (sets how fast the legs go)
+var _swing_amp := 0.55     # radians the hips swing at full speed
+var _knee_amp := 0.9       # how much the knee bends when a leg swings forward
+var _arm_swing := 0.6      # arms swing this much of the leg swing
 var _step_sound := "thud"
 var _voice_sound := "giggle"
+var _attack_sound := "snarl"
 var _step_db := 0.0
 
 
@@ -101,26 +128,40 @@ func _apply_kind() -> void:
 			wander_speed = 2.0
 			chase_speed = 4.8
 			see_distance = 9.0
-			_swing_walk = 4.0
-			_swing_run = 10.0
+			_step_len = 1.5
+			_swing_amp = 0.55
+			_knee_amp = 0.9
+			_arm_swing = 0.6
 			_step_sound = "thud"
 			_voice_sound = "giggle"
+			_attack_sound = "snarl"
 		Kind.GIANT:
 			kind_name = "Jumbo"
 			color = Color("3aa040")
 			_height = 2.9
 			wander_speed = 1.4
 			chase_speed = 4.0
+			accel = 9.0
+			turn_rate = 3.5
 			see_distance = 8.0
 			see_angle = 110.0
 			hear_distance = 4.0
-			catch_distance = 1.8
 			lose_after = 2.5
 			search_time = 5.0
-			_swing_walk = 3.0
-			_swing_run = 7.0
+			strike_range = 3.2
+			strike_arc = 75.0
+			windup_time = 0.8
+			strike_time = 0.22
+			recover_time = 1.4
+			lunge = 1.6
+			track_rate = 1.2
+			_step_len = 1.3
+			_swing_amp = 0.5
+			_knee_amp = 0.7
+			_arm_swing = 0.5
 			_step_sound = "stomp"
 			_voice_sound = "growl"
+			_attack_sound = "growl"
 			_step_db = 4.0
 		Kind.BIRD:
 			kind_name = "Opi"
@@ -128,16 +169,25 @@ func _apply_kind() -> void:
 			_height = 3.2
 			wander_speed = 2.4
 			chase_speed = 5.2
+			turn_rate = 6.0
 			see_distance = 9.0
 			see_angle = 120.0
 			hear_distance = 2.5
-			catch_distance = 1.4
 			lose_after = 1.5
 			search_time = 3.0
-			_swing_walk = 5.0
-			_swing_run = 13.0
+			strike_range = 2.0
+			strike_arc = 45.0
+			windup_time = 0.45
+			strike_time = 0.14
+			recover_time = 0.8
+			lunge = 0.8
+			_step_len = 1.3
+			_swing_amp = 0.5
+			_knee_amp = 0.0
+			_arm_swing = 0.2
 			_step_sound = "clack"
 			_voice_sound = "caw"
+			_attack_sound = "caw"
 			_step_db = -3.0
 
 
@@ -163,6 +213,12 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= gravity * delta
 
 	var player := _find_player()
+	if attack != Attack.NONE:
+		_attack_step(delta, player)
+		move_and_slide()
+		_animate(delta)
+		return
+
 	var awake := _grace <= 0.0
 	var sees := awake and player != null and _can_see(player)
 	var hears := awake and player != null and not sees and _can_hear(player)
@@ -203,7 +259,7 @@ func _physics_process(delta: float) -> void:
 		_retarget_in -= delta
 	else:
 		if chasing:
-			Game.say("...it lost you.  It won't leave its room.", 2.0)
+			Game.say("...%s lost you.  It won't leave its room." % kind_name, 2.0)
 		chasing = false
 		_retarget_in -= delta
 		if _retarget_in <= 0.0 or _flat_distance(_target) < 0.6:
@@ -215,17 +271,21 @@ func _physics_process(delta: float) -> void:
 	var to_step := step - global_position
 	to_step.y = 0.0
 	var moving := to_step.length() > 0.25
+	var facing := _facing()
 	if moving:
 		var dir := to_step.normalized()
-		velocity.x = dir.x * speed
-		velocity.z = dir.z * speed
-		_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(dir.x, dir.z), 7.0 * delta)
+		_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(dir.x, dir.z), turn_rate * delta)
+		# it has to turn its body before it can get going: no sprinting sideways
+		var aligned := clampf(facing.dot(dir), 0.0, 1.0)
+		var want := dir * speed * lerpf(0.3, 1.0, aligned)
+		velocity.x = move_toward(velocity.x, want.x, accel * delta)
+		velocity.z = move_toward(velocity.z, want.z, accel * delta)
 	else:
-		velocity.x = move_toward(velocity.x, 0.0, speed * 4.0 * delta)
-		velocity.z = move_toward(velocity.z, 0.0, speed * 4.0 * delta)
+		velocity.x = move_toward(velocity.x, 0.0, accel * delta)
+		velocity.z = move_toward(velocity.z, 0.0, accel * delta)
 
-	_animate(delta, moving, speed)
 	move_and_slide()
+	_animate(delta)
 
 	if moving and is_on_wall() and _repath_in > 0.1:
 		_repath_in = 0.1   # bumped into something: think again
@@ -235,9 +295,93 @@ func _physics_process(delta: float) -> void:
 	if _voice_in <= 0.0:
 		_say(0.0)
 
-	if player and awake and _cooldown <= 0.0 and _in_my_room(player.global_position) \
-			and global_position.distance_to(player.global_position) < catch_distance:
+	# close enough and in front of it: wind up for a swing
+	if player and chasing and _cooldown <= 0.0 and _in_my_room(player.global_position):
+		var to_player := player.global_position - global_position
+		to_player.y = 0.0
+		if to_player.length() < strike_range and facing.dot(to_player.normalized()) > 0.3:
+			_start_attack()
+
+
+# ---------------------------------------------------------------------------
+# The swing: WINDUP (arms up, roar - your warning) -> STRIKE (slams down + lunges) -> RECOVER (stuck)
+# ---------------------------------------------------------------------------
+func _start_attack() -> void:
+	attack = Attack.WINDUP
+	_attack_timer = windup_time
+	_strike_dir = _facing()
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_play(_attack_sound, 4.0, randf_range(0.8, 0.9))
+	_voice_in = randf_range(4.0, 8.0)
+
+
+func _attack_step(delta: float, player: Node3D) -> void:
+	_attack_timer -= delta
+	match attack:
+		Attack.WINDUP:
+			# it keeps turning towards you - but slowly, so a quick sidestep gets you out of the arc
+			if player:
+				var to_player := player.global_position - global_position
+				to_player.y = 0.0
+				if to_player.length() > 0.1:
+					var want := atan2(to_player.x, to_player.z)
+					var diff := wrapf(want - _visual.rotation.y, -PI, PI)
+					_visual.rotation.y += clampf(diff, -track_rate * delta, track_rate * delta)
+			velocity.x = move_toward(velocity.x, 0.0, accel * delta)
+			velocity.z = move_toward(velocity.z, 0.0, accel * delta)
+			if _attack_timer <= 0.0:
+				attack = Attack.STRIKE
+				_attack_timer = strike_time
+				_strike_dir = _facing()
+				_play("whoosh", 2.0, randf_range(0.9, 1.1))
+				# throw itself forward - unless that would take it out of its room
+				var ahead := global_position + _strike_dir * (lunge + 0.5)
+				var lunge_speed := lunge / maxf(strike_time, 0.01)
+				if _in_my_room(ahead) and (_level == null or _level.is_walkable(ahead)):
+					velocity.x = _strike_dir.x * lunge_speed
+					velocity.z = _strike_dir.z * lunge_speed
+		Attack.STRIKE:
+			if _attack_timer <= 0.0:
+				velocity.x = 0.0
+				velocity.z = 0.0
+				_land_strike(player)
+		Attack.RECOVER:
+			velocity.x = move_toward(velocity.x, 0.0, accel * delta)
+			velocity.z = move_toward(velocity.z, 0.0, accel * delta)
+			if _attack_timer <= 0.0:
+				attack = Attack.NONE
+				_cooldown = maxf(_cooldown, 0.3)
+				_repath_in = 0.0
+
+
+## The arms come down: did they land on you?
+func _land_strike(player: Node3D) -> void:
+	attack = Attack.RECOVER
+	_attack_timer = recover_time
+	if player and _in_my_room(player.global_position) and _in_strike_zone(player.global_position):
+		_play("stomp", 6.0, 0.7)
 		_catch(player)
+		return
+	_play("stomp", 3.0, randf_range(0.8, 0.95))
+	Game.player_missed(self)
+
+
+## Is this spot under the swing: in front of it, in reach, inside the arc?
+func _in_strike_zone(pos: Vector3) -> bool:
+	var to_pos := pos - global_position
+	to_pos.y = 0.0
+	var dist := to_pos.length()
+	if dist > strike_range * 0.9 + 0.3:
+		return false
+	if dist < 0.8:
+		return true   # right under it: no dodging that
+	return _strike_dir.dot(to_pos / dist) >= cos(deg_to_rad(strike_arc / 2.0))
+
+
+## Which way its body is pointing (flat).
+func _facing() -> Vector3:
+	return Vector3(sin(_visual.rotation.y), 0.0, cos(_visual.rotation.y))
 
 
 ## Where to walk right now: straight at the target, or along the grid path around the walls.
@@ -261,31 +405,85 @@ func _next_waypoint(direct: bool) -> Vector3:
 	return _path[_path_index]
 
 
-func _animate(delta: float, moving: bool, speed: float) -> void:
-	if moving:
-		var rate := _swing_run if chasing else _swing_walk
-		_stride_phase += delta * rate * clampf(speed / chase_speed, 0.4, 1.2)
-		var swing := sin(_stride_phase) * (0.75 if chasing else 0.4)
-		if kind == Kind.GIANT:
-			swing *= 0.6
-		_left_leg.rotation.x = swing
-		_right_leg.rotation.x = -swing
-		_left_arm.rotation.x = -swing * (0.9 if kind == Kind.GIANT else 0.6)
-		_right_arm.rotation.x = swing * (0.9 if kind == Kind.GIANT else 0.6)
-		_visual.position.y = abs(swing) * 0.15
-		# a foot hits the floor every time the swing crosses the middle
-		if signf(swing) != signf(_last_swing) and _last_swing != 0.0:
+## Walk cycle driven by how fast it is REALLY moving (after bumping into things), so the feet
+## never slide: one step every _step_len metres. Hips swing, the knee bends as a leg comes
+## forward, the body sinks as the legs spread (so the standing foot stays planted), sways to
+## the standing side, and leans into a run. Attacks take the arms (and the legs) over.
+func _animate(delta: float) -> void:
+	var v := get_real_velocity()
+	var ground_speed := Vector2(v.x, v.z).length()
+	var walking := ground_speed > 0.3 and attack == Attack.NONE
+	var swing := 0.0
+	var l_knee := 0.0
+	var r_knee := 0.0
+	if walking:
+		_stride_phase += delta * ground_speed / _step_len * PI
+		var amp := _swing_amp * lerpf(0.7, 1.1, clampf(ground_speed / chase_speed, 0.0, 1.0))
+		swing = sin(_stride_phase) * amp
+		l_knee = maxf(0.0, -cos(_stride_phase)) * _knee_amp
+		r_knee = maxf(0.0, cos(_stride_phase)) * _knee_amp
+		var step_index := int(floor(_stride_phase / PI))
+		if step_index != _last_step:
+			_last_step = step_index
 			_footstep()
-		_last_swing = swing
-	else:
-		_left_leg.rotation.x = lerp(_left_leg.rotation.x, 0.0, 6.0 * delta)
-		_right_leg.rotation.x = lerp(_right_leg.rotation.x, 0.0, 6.0 * delta)
-		_visual.position.y = lerp(_visual.position.y, 0.0, 6.0 * delta)
-	# breathing, twitching head, working jaw
+
+	# where the arms/legs/body want to be while attacking
+	var pose_target := 0.0
+	var lean_target := (0.22 if chasing else 0.06) if walking else 0.0
+	var pose_rate := 4.0
+	match attack:
+		Attack.WINDUP:
+			pose_target = 1.0
+			_arm_target = -2.8      # both arms high over its head, leaning back
+			lean_target = -0.3
+			pose_rate = 3.0 / maxf(windup_time, 0.05)
+		Attack.STRIKE:
+			pose_target = 1.0
+			_arm_target = -1.05     # slammed down and forward
+			lean_target = 0.5
+			pose_rate = 40.0
+		Attack.RECOVER:
+			pose_target = 1.0
+			_arm_target = -0.35     # hanging, spent
+			lean_target = 0.4
+			pose_rate = 3.0
+	_arm_pose = move_toward(_arm_pose, pose_target, pose_rate * delta)
+	_lean = lerpf(_lean, lean_target, minf(1.0, (25.0 if attack == Attack.STRIKE else 6.0) * delta))
+
+	# legs
+	var l_leg := lerpf(swing, -0.35, _arm_pose)          # braced stance while attacking
+	var r_leg := lerpf(-swing, 0.25, _arm_pose)
+	var settle := 1.0 if walking else minf(1.0, 8.0 * delta)
+	_left_leg.rotation.x = lerpf(_left_leg.rotation.x, l_leg, settle)
+	_right_leg.rotation.x = lerpf(_right_leg.rotation.x, r_leg, settle)
+	if _left_knee:
+		_left_knee.rotation.x = lerpf(_left_knee.rotation.x, lerpf(l_knee, 0.35, _arm_pose), settle)
+		_right_knee.rotation.x = lerpf(_right_knee.rotation.x, lerpf(r_knee, 0.35, _arm_pose), settle)
+
+	# body: sink with the stride, sway to the standing leg, lean into the run / the swing
+	var sink := -_leg_h * (1.0 - cos(swing)) - 0.12 * _arm_pose
+	_visual.position.y = lerpf(_visual.position.y, sink, settle)
+	_visual.rotation.z = lerpf(_visual.rotation.z, sin(_stride_phase) * 0.06 * (1.0 if walking else 0.0), settle)
+	_visual.rotation.x = _lean + sin(_stride_phase * 2.0) * 0.02 * (1.0 if walking else 0.0)
+
+	# arms: counter-swing the legs, reach forward when hunting; the attack pose overrides
+	var hang := -0.5 if chasing else 0.1
+	if kind == Kind.BIRD:
+		hang = 0.6   # folded wings
+	var l_arm := lerpf(-swing * _arm_swing + hang, _arm_target, _arm_pose)
+	var r_arm := lerpf(swing * _arm_swing + hang, _arm_target, _arm_pose)
+	var arm_settle := 1.0 if (walking or attack != Attack.NONE) else minf(1.0, 8.0 * delta)
+	_left_arm.rotation.x = lerpf(_left_arm.rotation.x, l_arm, arm_settle)
+	_right_arm.rotation.x = lerpf(_right_arm.rotation.x, r_arm, arm_settle)
+	_left_arm.rotation.z = 0.35 * _arm_pose     # hands apart when raised
+	_right_arm.rotation.z = -0.35 * _arm_pose
+
+	# breathing, twitching head, working jaw; it looks up as it winds up and down as it slams
 	_head.rotation.z = sin(_time * 1.7) * 0.08 + (sin(_time * 23.0) * 0.06 if chasing else 0.0)
-	_head.rotation.x = -0.1 + sin(_time * 0.9) * 0.05 + (0.15 if chasing else 0.0)
+	_head.rotation.x = -0.1 + sin(_time * 0.9) * 0.05 + (0.15 if chasing else 0.0) + _lean * 0.6
 	if _jaw:
-		_jaw.rotation.x = (0.25 + sin(_time * 14.0) * 0.2) if chasing else absf(sin(_time * 0.7)) * 0.08
+		var open := (0.25 + sin(_time * 14.0) * 0.2) if chasing else absf(sin(_time * 0.7)) * 0.08
+		_jaw.rotation.x = maxf(open, 0.5 * _arm_pose)
 
 
 func _footstep() -> void:
@@ -533,14 +731,14 @@ func _build_tall_one() -> void:
 			finger.rotation.x = 0.3
 			arm.add_child(finger)
 
-	# legs with big flat feet
-	_left_leg = _make_limb(-0.2, leg_h, leg_h, 0.1, color.darkened(0.1))
-	_right_leg = _make_limb(0.2, leg_h, leg_h, 0.1, color.darkened(0.1))
-	for leg in [_left_leg, _right_leg]:
-		_visual.add_child(leg)
-		var foot := _box(Vector3(0.24, 0.12, 0.45), color.darkened(0.35))
-		foot.position = Vector3(0, -leg_h + 0.06, 0.12)
-		leg.add_child(foot)
+	# legs with knees and big flat feet
+	_leg_h = leg_h
+	_left_leg = _make_leg(-0.2, leg_h, 0.1, color.darkened(0.1), Vector3(0.24, 0.12, 0.45), color.darkened(0.35))
+	_right_leg = _make_leg(0.2, leg_h, 0.1, color.darkened(0.1), Vector3(0.24, 0.12, 0.45), color.darkened(0.35))
+	_left_knee = _left_leg.get_node("Knee")
+	_right_knee = _right_leg.get_node("Knee")
+	_visual.add_child(_left_leg)
+	_visual.add_child(_right_leg)
 
 
 ## Enormous, green, hunched. A tiny head sunk between mountainous shoulders, little far-apart
@@ -630,13 +828,13 @@ func _build_giant() -> void:
 			knuckle.position = fist.position + Vector3((k - 1.5) * 0.17, 0.05, 0.3)
 			arm.add_child(knuckle)
 
-	_left_leg = _make_limb(-0.42, leg_h, leg_h, 0.26, color.darkened(0.1))
-	_right_leg = _make_limb(0.42, leg_h, leg_h, 0.26, color.darkened(0.1))
-	for leg in [_left_leg, _right_leg]:
-		_visual.add_child(leg)
-		var foot := _box(Vector3(0.5, 0.18, 0.7), dark)
-		foot.position = Vector3(0, -leg_h + 0.09, 0.15)
-		leg.add_child(foot)
+	_leg_h = leg_h
+	_left_leg = _make_leg(-0.42, leg_h, 0.26, color.darkened(0.1), Vector3(0.5, 0.18, 0.7), dark)
+	_right_leg = _make_leg(0.42, leg_h, 0.26, color.darkened(0.1), Vector3(0.5, 0.18, 0.7), dark)
+	_left_knee = _left_leg.get_node("Knee")
+	_right_knee = _right_leg.get_node("Knee")
+	_visual.add_child(_left_leg)
+	_visual.add_child(_right_leg)
 
 
 ## Very tall, very yellow. Stilt legs that bend backwards, a fat feathered body, a long neck,
@@ -719,6 +917,7 @@ func _build_bird() -> void:
 		_jaw.add_child(tooth)
 
 	# backwards-bending stilt legs with three-toed feet
+	_leg_h = leg_h
 	_left_leg = _make_bird_leg(-0.22, leg_h, orange)
 	_right_leg = _make_bird_leg(0.22, leg_h, orange)
 	_visual.add_child(_left_leg)
@@ -745,6 +944,30 @@ func _make_bird_leg(x: float, leg_h: float, c: Color) -> Node3D:
 		toe.rotation.y = (t - 1) * 0.45
 		pivot.add_child(toe)
 	return pivot
+
+
+## A leg that bends: hip pivot -> thigh -> "Knee" pivot -> shin + foot.
+func _make_leg(x: float, leg_h: float, radius: float, c: Color, foot_size: Vector3, foot_color: Color) -> Node3D:
+	var hip := Node3D.new()
+	hip.position = Vector3(x, leg_h, 0)
+	var thigh_len := leg_h * 0.5
+	var shin_len := leg_h - thigh_len
+	var thigh := _capsule(radius, thigh_len + radius, c)
+	thigh.position.y = -thigh_len / 2.0
+	hip.add_child(thigh)
+	var knee := Node3D.new()
+	knee.name = "Knee"
+	knee.position.y = -thigh_len
+	hip.add_child(knee)
+	var cap := _sphere(radius * 1.1, c)
+	knee.add_child(cap)
+	var shin := _capsule(radius * 0.85, shin_len, c)
+	shin.position.y = -shin_len / 2.0
+	knee.add_child(shin)
+	var foot := _box(foot_size, foot_color)
+	foot.position = Vector3(0, -shin_len + foot_size.y / 2.0, foot_size.z * 0.25)
+	knee.add_child(foot)
+	return hip
 
 
 func _make_limb(x: float, pivot_y: float, length: float, radius: float, c: Color) -> Node3D:

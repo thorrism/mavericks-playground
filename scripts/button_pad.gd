@@ -1,6 +1,6 @@
 extends Area3D
 ## A big floor button. Step on it (robot) or land on it (drone) to press it.
-## Whatever is connected to `pressed` happens - usually a door opens.
+## It clunks down with a heavy click, and whatever is connected to `pressed` happens - usually a door opens.
 
 signal pressed
 
@@ -62,6 +62,15 @@ func press() -> void:
 	if is_pressed:
 		return
 	is_pressed = true
+	var sound := AudioStreamPlayer3D.new()
+	sound.name = "ClickSound"
+	sound.stream = Sfx.get_sound("click")
+	sound.unit_size = 6.0
+	sound.max_distance = 40.0
+	sound.volume_db = 2.0
+	sound.position.y = 0.3
+	sound.autoplay = true
+	add_child(sound)
 	var tween := create_tween()
 	tween.tween_property(_cap, "position:y", 0.12 + 0.04, 0.15)
 	var mat: StandardMaterial3D = _cap.material_override
