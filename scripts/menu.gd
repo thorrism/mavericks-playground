@@ -1,13 +1,16 @@
 extends CanvasLayer
 ## The title screen and the pause menu (Esc), built in code. The game is frozen while
 ## it's up. Pick a difficulty here; it saves and applies straight away.
-##   Title:  KINDER ESCAPE in dripping blood, difficulty, PLAY, your records
+##   Title:  THE ABYSS in dripping blood, the chapter picker (1-8, escape one to unlock the next),
+##           difficulty, PLAY, your records
 ##   Pause:  RESUME / RESTART / difficulty / QUIT
-## Enter or Space = play/resume, Left/Right = change difficulty, Esc = back to the game.
+## Enter or Space = play/resume, Left/Right = change difficulty, Up/Down = change chapter,
+## Esc = back to the game.
 
 signal opened
 signal play
 signal restart
+signal chapter_picked(index: int)
 
 enum Mode { HIDDEN, TITLE, PAUSED }
 
@@ -24,6 +27,9 @@ var _heading: Label
 var _result: Label
 var _tagline: Label
 var _diff_buttons: Array[Button] = []
+var _chapter_row: HBoxContainer
+var _chapter_buttons: Array[Button] = []
+var _chapter_name: Label
 var _blurb: Label
 var _play: Button
 var _restart: Button
@@ -56,6 +62,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		Settings.set_difficulty(wrapi(Settings.difficulty - 1, 0, Settings.NAMES.size()))
 	elif event.is_action_pressed("ui_right"):
 		Settings.set_difficulty(wrapi(Settings.difficulty + 1, 0, Settings.NAMES.size()))
+	elif event.is_action_pressed("ui_up") and mode == Mode.TITLE:
+		_pick_chapter(Settings.chapter - 1)
+	elif event.is_action_pressed("ui_down") and mode == Mode.TITLE:
+		_pick_chapter(Settings.chapter + 1)
 	else:
 		return
 	get_viewport().set_input_as_handled()   # so the level doesn't also see this key
@@ -67,10 +77,12 @@ func show_title(result := "") -> void:
 	_heading.visible = false
 	_title.visible = true
 	_gap.visible = true
-	_title.scare("KINDER ESCAPE", 1.0e9)
+	_title.scare("THE ABYSS", 1.0e9)
 	_result.text = result
 	_result.visible = result != ""
 	_tagline.visible = true
+	_chapter_row.visible = true
+	_chapter_name.visible = true
 	_play.text = "PLAY"
 	_restart.visible = false
 	_stats.visible = true
@@ -82,8 +94,12 @@ func show_pause() -> void:
 	_title.visible = false
 	_gap.visible = false
 	_heading.visible = true
+	_heading.text = "PAUSED"
 	_result.visible = false
 	_tagline.visible = false
+	_chapter_row.visible = false
+	_chapter_name.visible = true
+	_chapter_name.text = Chapters.title(Settings.chapter)
 	_play.text = "RESUME"
 	_restart.visible = true
 	_stats.visible = false
@@ -122,19 +138,43 @@ func _on_restart() -> void:
 	restart.emit()
 
 
+## Tap a chapter number (only unlocked ones work). The level rebuilds itself behind the menu.
+func _pick_chapter(index: int) -> void:
+	if index < 0 or index >= Chapters.count():
+		return
+	if not Settings.is_unlocked(index):
+		_chapter_name.text = "CHAPTER %d  ·  LOCKED  -  escape chapter %d first" % [index + 1, index]
+		return
+	if Settings.set_chapter(index):
+		chapter_picked.emit(index)
+	_refresh()
+
+
 func _refresh() -> void:
+	for i in _chapter_buttons.size():
+		var b := _chapter_buttons[i]
+		var picked := i == Settings.chapter
+		var open := Settings.is_unlocked(i)
+		b.text = str(i + 1) if open else "x"
+		b.add_theme_stylebox_override("normal", _style(BLOOD if picked else Color(0.1, 0.08, 0.08), BLOOD if picked else (Color(0.3, 0.25, 0.25) if open else Color(0.18, 0.15, 0.15))))
+		b.add_theme_color_override("font_color", Color.WHITE if picked else (DIM if open else Color(0.35, 0.3, 0.3)))
+	if mode == Mode.TITLE:
+		_chapter_name.text = Chapters.title(Settings.chapter)
+		var best: float = Settings.best_times[Settings.chapter]
+		if best > 0.0:
+			_chapter_name.text += "   ·   best %s" % Settings.fmt_time(best)
+		var def := Chapters.get_chapter(Settings.chapter)
+		_tagline.text = "find the %d toys.  %s" % [Chapters.toy_count(Settings.chapter), def["tagline"]]
 	for i in _diff_buttons.size():
 		var b := _diff_buttons[i]
 		var picked := i == Settings.difficulty
 		b.add_theme_stylebox_override("normal", _style(BLOOD if picked else Color(0.1, 0.08, 0.08), BLOOD if picked else Color(0.3, 0.25, 0.25)))
 		b.add_theme_color_override("font_color", Color.WHITE if picked else DIM)
 	_blurb.text = Settings.BLURBS[Settings.difficulty]
-	var stats := "escapes %d   ·   tries %d" % [Settings.escapes, Settings.attempts]
-	if Settings.best_time > 0.0:
-		stats += "   ·   best %s" % Settings.fmt_time(Settings.best_time)
+	var stats := "escapes %d   ·   tries %d   ·   chapters unlocked %d / %d" % [Settings.escapes, Settings.attempts, Settings.unlocked + 1, Chapters.count()]
 	_stats.text = stats
 	_controls.text = ("drag to look   ·   joystick to move   ·   JUMP   ·   DRONE" if TouchControls.is_touch()
-		else "WASD move   ·   mouse look   ·   Space jump   ·   E drone   ·   Esc pause / restart")
+		else "WASD move   ·   mouse look   ·   Space jump   ·   E drone   ·   F flashlight   ·   Esc pause / restart")
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +219,23 @@ func _build() -> void:
 
 	_result = _label("", 40, Color(1.0, 0.85, 0.4))
 	_box.add_child(_result)
+
+	_chapter_row = HBoxContainer.new()
+	_chapter_row.name = "Chapters"
+	_chapter_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_chapter_row.add_theme_constant_override("separation", 10)
+	_box.add_child(_chapter_row)
+	for i in Chapters.count():
+		var b := _button(str(i + 1), 30)
+		b.name = "Chapter%d" % (i + 1)
+		b.custom_minimum_size = Vector2(64, 60)
+		b.focus_mode = Control.FOCUS_NONE
+		b.pressed.connect(_pick_chapter.bind(i))
+		_chapter_row.add_child(b)
+		_chapter_buttons.append(b)
+	_chapter_name = _label("", 34, Color(1.0, 0.85, 0.4))
+	_chapter_name.name = "ChapterName"
+	_box.add_child(_chapter_name)
 	_tagline = _label("find the 6 toys.  don't let them find you.", 30, BONE)
 	_box.add_child(_tagline)
 

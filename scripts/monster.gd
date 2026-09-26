@@ -49,6 +49,10 @@ enum Attack { NONE, WINDUP, STRIKE, RECOVER }
 ## Nothing may poke through the ceiling (walls are 3 m).
 const MAX_TOP := 2.8
 
+## How big this one is compared to normal (later chapters: 1.05 ... 1.6). Indoors it still has
+## to fit under the ceiling; out on the playground there's no ceiling to stop it.
+@export var size := 1.0
+
 ## True while it is hunting you (audio + screen effects listen to this).
 var chasing := false
 var kind_name := "the tall one"
@@ -124,6 +128,7 @@ var _base_search_time := 0.0
 var _base_spawn_grace := 0.0
 var _base_hide_catch_range := 0.0
 var _base_check_cupboard_range := 0.0
+var _fit_scale := 1.0   # _visual.scale after fitting the normal-size model under a 2.8 m ceiling
 
 
 func _ready() -> void:
@@ -141,18 +146,23 @@ func _ready() -> void:
 	_base_spawn_grace = spawn_grace
 	_base_hide_catch_range = hide_catch_range
 	_base_check_cupboard_range = check_cupboard_range
+	_level = get_parent()
+	while _level and not _level.has_method("find_path"):
+		_level = _level.get_parent()
 	_apply_difficulty()
 	Settings.changed.connect(_apply_difficulty)
 	_grace = spawn_grace
 	_home = global_position
 	_target = _home
-	_level = get_parent()
-	while _level and not _level.has_method("find_path"):
-		_level = _level.get_parent()
 	if _level and _level.has_method("room_at"):
 		_room = _level.room_at(_home)
 	_build()
 	_add_collision()
+	# a bigger creature reaches further
+	var reach := 1.0 + (_visual.scale.y / _fit_scale - 1.0) * 0.6
+	strike_range *= reach
+	lunge *= reach
+	swing_width *= reach
 	_audio = AudioStreamPlayer3D.new()
 	var poly := AudioStreamPolyphonic.new()
 	poly.polyphony = 4
@@ -167,16 +177,17 @@ func _ready() -> void:
 ## The difficulty picked on the title screen scales the numbers from _apply_kind (see Settings.TUNING).
 func _apply_difficulty() -> void:
 	var t: Dictionary = Settings.monster_tuning()
+	var hunt: float = _level.hunt if _level and "hunt" in _level else 1.0   # later chapters hunt harder
 	var old_grace := spawn_grace
 	wander_speed = _base_wander_speed * t["speed"]
-	chase_speed = _base_chase_speed * t["speed"]
-	see_distance = _base_see_distance * t["sight"]
-	hear_distance = _base_hear_distance * t["sight"]
+	chase_speed = _base_chase_speed * t["speed"] * (1.0 + (hunt - 1.0) * 0.25)
+	see_distance = _base_see_distance * t["sight"] * hunt
+	hear_distance = _base_hear_distance * t["sight"] * hunt
 	windup_time = _base_windup_time * t["windup"]
 	commit_before = _base_commit_before * t["windup"]
 	recover_time = _base_recover_time * t["recover"]
-	lose_after = _base_lose_after * t["persist"]
-	search_time = _base_search_time * t["persist"]
+	lose_after = _base_lose_after * t["persist"] * hunt
+	search_time = _base_search_time * t["persist"] * hunt
 	spawn_grace = _base_spawn_grace * t["grace"]
 	hide_catch_range = _base_hide_catch_range * t["sight"]
 	check_cupboard_range = _base_check_cupboard_range * t["peek"]
@@ -262,10 +273,11 @@ func _apply_kind() -> void:
 func _add_collision() -> void:
 	var shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.8 if kind == Kind.GIANT else 0.45
-	capsule.height = 2.2
+	var s := _visual.scale.y / _fit_scale   # how much bigger than the normal, ceiling-fitted model
+	capsule.radius = (0.8 if kind == Kind.GIANT else 0.45) * s
+	capsule.height = 2.2 * s
 	shape.shape = capsule
-	shape.position.y = 1.1
+	shape.position.y = 1.1 * s
 	add_child(shape)
 
 
@@ -757,6 +769,7 @@ func _build() -> void:
 		_:
 			_build_tall_one()
 	_fit_under_ceiling()
+	_grow()
 
 
 ## Shrink the whole model (keeping its proportions) so its highest point stays below the ceiling.
@@ -764,6 +777,21 @@ func _fit_under_ceiling() -> void:
 	var top := model_top()
 	if top > MAX_TOP:
 		_visual.scale = Vector3.ONE * (MAX_TOP / top)
+	_fit_scale = _visual.scale.y
+
+
+## Later chapters: bigger. Indoors the room's ceiling (wall_height) is still the limit;
+## outdoors (the playground) it isn't.
+func _grow() -> void:
+	if is_equal_approx(size, 1.0):
+		return
+	var scale_factor := size
+	if _level and "outdoors" in _level and not _level.outdoors:
+		var ceiling: float = _level.wall_height - 0.3 if "wall_height" in _level else MAX_TOP
+		var top := model_top()
+		if top * size > ceiling:
+			scale_factor = maxf(ceiling / top, 1.0)
+	_visual.scale *= scale_factor
 
 
 ## Highest point of the model, in metres above its feet.

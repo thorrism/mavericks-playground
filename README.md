@@ -1,14 +1,31 @@
-# Robot Sandbox
+# The Abyss
 
 A tiny 3D game built with [Godot 4](https://godotengine.org) that runs on Mac **and** iPhone.
 It exists so a kid + a grown-up + Devin can say "make the robot green and add lava" and see it happen in seconds.
 
-## Kinder Escape (the current game)
+## The Abyss (the current game)
 
-First person. You wake up in a dark, abandoned kindergarten with only a flashlight. Three
-things live here and hunt you if they see or hear you. Find all six toys, use your drone to
-reach buttons the robot can't, open the coloured doors, and escape through the golden exit
-at the very top of the school.
+First person. You wake up in a dark, abandoned school with only a flashlight. Things live here
+and hunt you if they see or hear you. Find every toy, use your drone to reach buttons the robot
+can't, open the coloured doors, and escape through the golden exit - eight times.
+
+### Eight chapters
+
+| # | Chapter | What's new |
+|---|---|---|
+| 1 | **Classroom** | learn the rules: 6 toys, 2 doors, 2 creatures, a cupboard to hide in |
+| 2 | **Hallway** | lockers, 4 doors, long corridors - and something walks them |
+| 3 | **Library** | bookcases you have to weave through; the first **timed door** (it slams shut again) |
+| 4 | **Lunchroom** | kitchen and dining hall, 3 creatures, a faster timed door |
+| 5 | **Gym** | huge open hall (nowhere to hide), stacked mats, doors on a short fuse |
+| 6 | **Art Room** | a maze of easels and paint tins, four colours of door, quick fuses |
+| 7 | **Playground** | **outside at night**: moon, trees, hedges, swings, a slide - and the creatures are *big* |
+| 8 | **The Abyss** | the science lab where it all went wrong: cracked tanks, green glow, three 12-second doors, the biggest creatures of all |
+
+Escape a chapter to unlock the next one; the title screen lets you pick any chapter you've
+unlocked (`Up`/`Down`, or tap it). Each chapter is its own **text map** in `scripts/chapters.gd`,
+so "put a tree in the playground" is a one-letter edit. Creatures get bigger and hunt harder every
+chapter (`monster_scale` / `hunt` in the same file); later rooms have higher ceilings so they fit.
 
 - Almost no light: your **flashlight** (`F` switches it off - then it's just the dying ceiling lamps,
   the glow of the toys and their eyes).
@@ -19,7 +36,10 @@ at the very top of the school.
   you when one is close. On NORMAL and NIGHTMARE a monster that loses you *next to* a cupboard
   comes over, flings the doors open and looks inside (`BANBO FOUND YOU`). On EASY cupboards always work.
 - Now and then something thuds, clacks or giggles in another room. It's nothing. Probably.
-- Step on a **button** (or land the drone on it) and the door of the same colour opens.
+- Step on a **button** (or land the drone on it) and the door of the same colour opens. From
+  chapter 3 some doors are **timed**: they grind shut again after a few seconds (the last five are
+  counted down on screen), so you have to run for it - or press the button again. A door never shuts
+  on anyone standing in it.
 - **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
 - Two **monsters** (map letters `M` = Banbo, a tall teal grinning thing with a bow tie, and `J` = Jumbo,
   a huge green brute; `O` adds a lanky yellow bird if you want one) - one per room. They really walk
@@ -31,7 +51,7 @@ at the very top of the school.
 - **The swing**: touching a monster doesn't kill you. When it gets close it snarls and raises both
   arms - that is your warning - then slams them down and lunges. Sidestep out of the arc and it
   misses (`JUMBO MISSED YOU`) and is stuck for a moment; stand there and it lands: red flash, black,
-  and the level starts over.
+  and the chapter starts over.
 - Buttons clunk when pressed and doors grind open, so you can hear that something happened.
 - Collect every toy and the **golden door** opens and glows; walk through it to escape.
 - All sound is generated from code: footsteps (yours and theirs, heavier when they chase), a toy chime,
@@ -53,8 +73,11 @@ Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
 (`flashlight_*`, `fog_density`, wall colours, the scare words) and `scripts/monster.gd`
 (`chase_speed`, `see_distance`, `hear_distance`, `lose_after`, `spawn_grace` - per kind in `_apply_kind`).
 
-The whole level is a **text map** at the top of `scripts/kinder.gd` - move a `T`, add an `M`,
-hang a lamp with `L`, put a hiding cupboard against a wall with `H`, a table with `t`, draw a new room with `#`, and re-run. The original battery arena is still there too: `make arena`.
+Every chapter is a **text map** in `scripts/chapters.gd` - move a `T`, add an `M`, hang a lamp with `L`,
+put a hiding cupboard against a wall with `H`, a table with `t`, a shelf/locker/tank/swing with `S`,
+crates or a slide with `Z`, a tree or pillar with `^`, draw a new room with `#`, and re-run.
+`python3 tools/check_maps.py` tells you if a map is broken (unreachable toy, door without a button...)
+and `make test` runs it too. The original battery arena is still there: `make arena`.
 
 ## Play it right now
 
@@ -76,8 +99,11 @@ Export templates go in `~/Library/Application Support/Godot/export_templates/4.7
 ## Where things live
 
 ```
-scenes/kinder.tscn      Kinder Escape: dark environment/fog, first-person camera + flashlight, HUD, fade, touch controls
-scripts/kinder.gd       THE MAP (text) + colours + scary knobs + builds walls/doors/buttons/toys/monsters/lamps
+scenes/kinder.tscn      The Abyss: dark environment/fog, first-person camera + flashlight, HUD, fade, touch controls
+scripts/chapters.gd     THE 8 CHAPTERS: a text map + name + timed doors + creature size for each
+scripts/kinder.gd       builds the chapter: colours/themes per room, scary knobs, walls/doors/buttons/toys/monsters/lamps
+scripts/settings.gd     difficulty, which chapter you're on, what's unlocked, best times (saved between runs)
+tools/check_maps.py     checks every chapter map is solvable (run by `make test`)
 scripts/monster.gd      the three monsters: behaviour knobs at the top, brain (A* paths, seeing/hearing), then the models
 scripts/lamp.gd         a flickering ceiling lamp (`L` on the map)
 scripts/spooky_audio.gd hum / music box / panic music / your footsteps / chime / scream

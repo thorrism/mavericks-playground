@@ -1,6 +1,7 @@
 extends SceneTree
 ## Headless smoke test. Run with:  make test
-## Loads both levels, drives the robot around, and checks the rules work.
+## Loads the arena, then Chapter 1 of The Abyss, drives the robot around and checks the rules work;
+## then builds every chapter (1-8) and checks the maps, the puzzles, the unlocking and the theming.
 
 var _failures := 0
 var game: Node
@@ -32,10 +33,14 @@ func _run() -> void:
 		root.add_child(settings)
 	settings.persist = false   # don't touch the player's saved records
 	settings.difficulty = settings.Difficulty.NORMAL
+	settings.chapter = 0
+	settings.unlocked = 0
+	settings.best_times.fill(0.0)
 	game.title_pending = false   # no title screen: straight into the level
 
 	await _test_arena()
 	await _test_kinder()
+	await _test_chapters()
 
 	if _failures == 0:
 		print("ALL CHECKS PASSED")
@@ -99,10 +104,10 @@ func _test_arena() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Kinder Escape (map, doors, buttons, drone, monsters, exit)
+# The Abyss (map, doors, buttons, drone, monsters, exit)
 # ---------------------------------------------------------------------------
 func _test_kinder() -> void:
-	print("Smoke test: kinder escape")
+	print("Smoke test: the abyss")
 	var level: Node3D = load("res://scenes/kinder.tscn").instantiate()
 	root.add_child(level)
 	await process_frame
@@ -134,7 +139,7 @@ func _test_kinder() -> void:
 		_check(has_audio and m.find_children("*", "OmniLight3D", true, false).size() >= 2,
 			"%s has glowing eyes and its own 3D sound" % m.kind_name)
 		var top: float = m.model_top()
-		_check(top > 2.0 and top < level.WALL_HEIGHT - 0.1, "%s fits under the ceiling (top=%.2f m)" % [m.kind_name, top])
+		_check(top > 2.0 and top < level.wall_height - 0.1, "%s fits under the ceiling (top=%.2f m)" % [m.kind_name, top])
 		_check(m._left_knee != null and m._left_knee.get_parent() == m._left_leg, "%s has legs that bend at the knee" % m.kind_name)
 		if m.kind == 0:
 			tall = m
@@ -307,7 +312,7 @@ func _test_kinder() -> void:
 	monster._hunt_timer = 0.0
 	monster._search_timer = 0.0
 	monster._visual.rotation.y = PI
-	await _settle(2)
+	await _settle(4)
 	monster.set_physics_process(false)
 	_check(not level.hiding and not monster._busted, "out of the cupboard: not hiding any more")
 
@@ -512,7 +517,12 @@ func _test_kinder() -> void:
 		if child.has_method("find_path"):
 			after_escape = child
 	_check(after_escape != null and after_escape != level and game.collected == 0, "escaping starts a fresh level")
-	_check(settings.escapes == 1 and settings.best_time > 0.0, "escape recorded: %d escape(s), best %s" % [settings.escapes, settings.fmt_time(settings.best_time)])
+	_check(settings.escapes == 1 and settings.best_time > 0.0 and settings.best_times[0] > 0.0,
+		"escape recorded: %d escape(s), best %s, chapter 1 best %s" % [settings.escapes, settings.fmt_time(settings.best_time), settings.fmt_time(settings.best_times[0])])
+	_check(settings.unlocked == 1 and settings.chapter == 1 and after_escape != null and after_escape.chapter == 1,
+		"escaping chapter 1 unlocks chapter 2 and the fresh level IS chapter 2 (%s)" % Chapters.title(after_escape.chapter if after_escape else 0))
+	_check(game.last_result.contains("CHAPTER 2 UNLOCKED") or (after_escape and after_escape.get_node("Menu")._result.text.contains("CHAPTER 2 UNLOCKED")),
+		"the result screen says which chapter you unlocked")
 	if after_escape:
 		await _test_menus(after_escape)
 		after_escape.queue_free()
@@ -525,7 +535,7 @@ func _test_menus(level: Node3D) -> void:
 	var hud: CanvasLayer = level.get_node("HUD")
 	await process_frame
 	_check(menu.mode == menu.Mode.TITLE and paused, "after escaping, the title screen is up and the level is frozen")
-	_check(menu._result.visible and menu._result.text.begins_with("YOU ESCAPED in"), "title shows your time: '%s'" % menu._result.text)
+	_check(menu._result.visible and menu._result.text.begins_with("CHAPTER 1 ESCAPED in"), "title shows your time: '%s'" % menu._result.text.get_slice("\n", 0))
 	_check(not level._playing and not hud.ticking, "clock isn't running on the title screen")
 	var tries: int = settings.attempts
 	menu._on_play()
@@ -560,8 +570,178 @@ func _test_menus(level: Node3D) -> void:
 		"pressing R does nothing (same level, still try #%d)" % settings.attempts)
 
 
-func _count_in_map(ch: String) -> int:
+func _count_in_map(ch: String, chapter := 0) -> int:
 	var n := 0
-	for row in load("res://scripts/kinder.gd").MAP:
+	for row: String in Chapters.get_chapter(chapter)["map"]:
 		n += row.count(ch)
 	return n
+
+
+# ---------------------------------------------------------------------------
+# Chapters 1-8: maps, unlocking, escalation, playground night, the lab
+# ---------------------------------------------------------------------------
+const SYMBOLS := "#W.PTMJOL=XH123456789abcdefghiSZ^t"
+
+func _test_chapters() -> void:
+	print("Smoke test: chapters 1-8")
+	_check(Chapters.count() == 8, "there are %d chapters" % Chapters.count())
+	var names: Array[String] = []
+	for i in Chapters.count():
+		names.append(Chapters.get_chapter(i)["name"])
+	_check(names == ["CLASSROOM", "HALLWAY", "LIBRARY", "LUNCHROOM", "GYM", "ART ROOM", "PLAYGROUND", "THE ABYSS"], "chapter order: %s" % ", ".join(names))
+	_check(Chapters.title(0) == "CHAPTER 1  ·  CLASSROOM" and Chapters.title(7).begins_with("CHAPTER 8"), "they're called chapters: '%s'" % Chapters.title(7))
+
+	var prev_scale := 0.0
+	var prev_puzzle := 0
+	var prev_toys := 0
+	var timed_chapters := 0
+	for i in Chapters.count():
+		var def: Dictionary = Chapters.get_chapter(i)
+		var map: Array = def["map"]
+		var width: int = map[0].length()
+		var rect := true
+		var bad := ""
+		var p := 0
+		var x := 0
+		var doors := {}
+		var buttons := {}
+		for row: String in map:
+			rect = rect and row.length() == width
+			for ch in row:
+				if not SYMBOLS.contains(ch):
+					bad += ch
+				if ch >= "1" and ch <= "9":
+					doors[ch] = true
+				elif ch >= "a" and ch <= "i":
+					buttons[str(ch.unicode_at(0) - "a".unicode_at(0) + 1)] = true
+			p += row.count("P")
+			x += row.count("X")
+		_check(rect and map.size() >= 12 and width >= 16, "%s: map is a %dx%d rectangle" % [def["name"], width, map.size()])
+		_check(bad == "", "%s: only known map symbols%s" % [def["name"], "" if bad == "" else " (bad: %s)" % bad])
+		_check(p == 1 and x == 1, "%s: one start, one exit" % def["name"])
+		_check(doors.keys() == buttons.keys() or (doors.size() == buttons.size() and doors.keys().all(func(k: String) -> bool: return buttons.has(k))),
+			"%s: every door has a button and every button a door (%s)" % [def["name"], "".join(doors.keys())])
+		var puzzle: int = doors.size() + def.get("timed", {}).size()
+		_check(puzzle >= prev_puzzle, "%s: %d door puzzles%s (no easier than the chapter before)" % [def["name"], doors.size(), "" if def.get("timed", {}).is_empty() else " incl. %d timed" % def["timed"].size()])
+		_check(Chapters.toy_count(i) >= prev_toys, "%s: %d toys" % [def["name"], Chapters.toy_count(i)])
+		_check(def["monster_scale"] >= prev_scale and def["hunt"] >= 1.0, "%s: creatures x%.2f, hunt x%.2f" % [def["name"], def["monster_scale"], def["hunt"]])
+		if not def.get("timed", {}).is_empty():
+			timed_chapters += 1
+		prev_scale = def["monster_scale"]
+		prev_puzzle = puzzle
+		prev_toys = Chapters.toy_count(i)
+	_check(timed_chapters >= 4 and Chapters.get_chapter(0).get("timed", {}).is_empty(), "%d chapters have timed doors, chapter 1 has none" % timed_chapters)
+	_check(Chapters.get_chapter(7)["monster_scale"] > Chapters.get_chapter(6)["monster_scale"] and Chapters.get_chapter(6)["monster_scale"] > 1.2,
+		"the playground has bigger creatures (x%.2f) and the lab the biggest (x%.2f)" % [Chapters.get_chapter(6)["monster_scale"], Chapters.get_chapter(7)["monster_scale"]])
+
+	# locked chapters can't be picked
+	settings.unlocked = 0
+	settings.chapter = 0
+	_check(not settings.set_chapter(3) and settings.chapter == 0 and not settings.is_unlocked(1), "a locked chapter can't be picked")
+	settings.record_escape(0, 60.0)
+	_check(settings.unlocked == 1 and settings.set_chapter(1) and settings.chapter == 1, "escaping chapter 1 unlocks chapter 2 and it can be picked")
+	settings.record_escape(7, 60.0)
+	_check(settings.unlocked == 7, "escaping the last chapter doesn't unlock a 9th (%d)" % (settings.unlocked + 1))
+
+	# build every chapter for real
+	settings.unlocked = 7
+	var chapter1_top := 0.0
+	for i in Chapters.count():
+		settings.chapter = i
+		var def: Dictionary = Chapters.get_chapter(i)
+		var level: Node3D = load("res://scenes/kinder.tscn").instantiate()
+		root.add_child(level)
+		await process_frame
+		await physics_frame
+		var robot: CharacterBody3D = level.get_node("Robot")
+		var world: Node3D = level.get_node("World")
+		var toys := get_nodes_in_group("battery")
+		var monsters := get_nodes_in_group("monster")
+		var doors := get_nodes_in_group("door")
+		var buttons := get_nodes_in_group("button")
+		var title: String = Chapters.title(i)
+		_check(level.chapter == i and level.hud.subtitle == title.to_lower(), "%s: built, HUD says '%s'" % [def["name"], level.hud.subtitle])
+		_check(toys.size() == _count_in_map("T", i) and toys.size() == Chapters.toy_count(i), "%s: %d toys from the map" % [def["name"], toys.size()])
+		var letters := _count_in_map("M", i) + _count_in_map("J", i) + _count_in_map("O", i)
+		_check(monsters.size() == letters and monsters.size() >= 2, "%s: %d creatures from the map" % [def["name"], monsters.size()])
+		var door_letters := 0
+		var button_letters := 0
+		for row: String in def["map"]:
+			for ch in row:
+				if ch >= "1" and ch <= "9":
+					door_letters += 1
+				elif ch >= "a" and ch <= "i":
+					button_letters += 1
+		_check(doors.size() == door_letters + 1 and buttons.size() == button_letters, "%s: %d doors (+exit) and %d buttons built" % [def["name"], door_letters, buttons.size()])
+		var shares_start := false
+		for m in monsters:
+			shares_start = shares_start or level.room_at(m.global_position) == level.room_at(robot.global_position)
+			m.set_physics_process(false)
+		_check(not shares_start, "%s: no creature in your start room" % def["name"])
+		_check(level.get_node("HUD/ScoreLabel").text == "Toys: 0/%d" % toys.size(), "%s: HUD counts %d toys" % [def["name"], toys.size()])
+		await _settle(20)
+		_check(robot.is_on_floor() and robot.global_position.y > -0.5, "%s: you're standing on the floor" % def["name"])
+
+		# size: chapter 1 is the baseline, everything else is at least as big, indoors under the ceiling
+		var top: float = monsters[0].model_top()
+		if i == 0:
+			chapter1_top = top
+		var ceiling_ok := true
+		for m in monsters:
+			if not level.outdoors:
+				ceiling_ok = ceiling_ok and m.model_top() < level.wall_height - 0.1
+		_check(ceiling_ok and top >= chapter1_top - 0.01, "%s: creature top %.2f m (ceiling %s)" % [def["name"], top, "none" if level.outdoors else "%.1f m" % level.wall_height])
+		_check(is_equal_approx(monsters[0].size, def["monster_scale"]), "%s: creatures are x%.2f" % [def["name"], monsters[0].size])
+
+		var environment: Environment = level.get_node("WorldEnvironment").environment
+		if def["theme"] == "playground":
+			var ceilings := 0
+			for child in world.get_children():
+				if child is MeshInstance3D and child.position.y > 2.5 and child.position.y < 3.5 and (child.mesh as BoxMesh) and (child.mesh as BoxMesh).size.x > 20.0:
+					ceilings += 1
+			_check(level.outdoors and ceilings == 0, "PLAYGROUND: outdoors, no ceiling")
+			_check(environment.background_mode == Environment.BG_SKY and environment.sky != null and world.has_node("Moon"), "PLAYGROUND: night sky with a moon")
+			_check(environment.ambient_light_energy <= 0.12, "PLAYGROUND: it's night (ambient %.2f)" % environment.ambient_light_energy)
+			_check(world.find_children("Tree*", "Node3D", false, false).size() >= 3 and world.find_children("Swings*", "Node3D", false, false).size() >= 1
+				and world.find_children("Slide*", "Node3D", false, false).size() >= 1, "PLAYGROUND: trees, swings and a slide")
+			_check(top > chapter1_top * 1.2, "PLAYGROUND: creatures really are bigger (%.2f m vs %.2f m in chapter 1)" % [top, chapter1_top])
+		else:
+			_check(not level.outdoors, "%s: indoors" % def["name"])
+		if def["theme"] == "lab":
+			_check(level.wall_height > 4.0 and world.find_children("Tank*", "Node3D", false, false).size() >= 3, "THE ABYSS: a tall lab with %d containment tanks" % world.find_children("Tank*", "Node3D", false, false).size())
+			var words := ""
+			for l in world.find_children("*", "Label3D", true, false):
+				words += (l as Label3D).text + " | "
+			_check(words.to_lower().contains("tank") or words.to_lower().contains("lab") or words.to_lower().contains("subject") or words.to_lower().contains("made"), "THE ABYSS: the walls tell you the experiment went wrong")
+			_check(top > chapter1_top * 1.4, "THE ABYSS: the biggest creatures (%.2f m)" % top)
+
+		# timed doors: press the button, the door opens, the timer runs out, it slams shut and is solid again
+		var timed: Dictionary = def.get("timed", {})
+		if not timed.is_empty():
+			var key: String = timed.keys()[0]
+			var door: StaticBody3D = level._doors[key][0]
+			var cell := Vector2i(-1, -1)
+			for r in def["map"].size():
+				var c: int = def["map"][r].find(key)
+				if c >= 0 and cell.x < 0:
+					cell = Vector2i(c, r)
+			_check(door.close_after == float(timed[key]) and not door.is_open, "%s: door %s is timed (%.0fs) and starts shut" % [def["name"], key, door.close_after])
+			level._on_button_pressed(key)
+			await _settle(2)
+			_check(door.is_open and not level._grid.is_point_solid(cell) and level.door_time_left(door) > 0.0, "%s: button opens it and the countdown starts (%.1fs)" % [def["name"], level.door_time_left(door)])
+			level._door_timers[door] = 0.01
+			await _settle(3)
+			_check(not door.is_open and level._grid.is_point_solid(cell) and level.door_time_left(door) == 0.0, "%s: ...then it slams shut and is solid again" % def["name"])
+			level._on_button_pressed(key)
+			await _settle(2)
+			_check(door.is_open, "%s: pressing the button again re-opens it" % def["name"])
+			robot.global_position = door.global_position + Vector3(0, 0.1, 0)
+			level._door_timers[door] = 0.01
+			await _settle(3)
+			_check(door.is_open and level.door_time_left(door) > 0.0, "%s: it won't slam shut on you while you're in the doorway" % def["name"])
+
+		level.queue_free()
+		await process_frame
+		await process_frame
+	settings.chapter = 0
+	settings.unlocked = 0

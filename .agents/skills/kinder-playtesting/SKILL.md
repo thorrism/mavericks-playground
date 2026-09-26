@@ -3,7 +3,7 @@ name: kinder-playtesting
 description: Record and inspect first-person Godot gameplay on the macOS VM, including short monster attack animations.
 ---
 
-# Kinder Escape runtime testing
+# The Abyss (Kinder Escape) runtime testing
 
 - Use the worktree named in the current handoff; several game checkouts can
   exist. Confirm branch/commit and stop stale Godot instances before launching

@@ -7,19 +7,26 @@ every prompt below is a 1-3 minute change so nobody gets bored waiting.
 **Tip for Devin:** always `make test && make run`, take a screenshot (`screencapture`), and
 attach it. Kids want to *see* it. Keep the code in the existing files; no new systems unless asked.
 
-## Kinder Escape - the level is a text map
+## The Abyss - every chapter is a text map
 
-The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
+Eight chapters, all in `scripts/chapters.gd`, each one a little drawing like this:
 
 ```
 ##########X#########      #  wall        T  toy        X  golden exit door
-#..................#      W  low wall (drone only)     =  fence (jump over)
-#.T..J......L..M.T.#      L  flickering lamp            1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
-#..................#      M  Banbo (tall teal)   J  Jumbo (big green)   O  Opi the bird (not on the map right now)
+#..................#      W  low wall (drone only)     =  fence (jump over)   ^  tree (outside) / pillar
+#.T..J......L..M.T.#      L  flickering lamp            1 2 3 4 doors   a b c d buttons  (a opens 1, b opens 2 ...)
+#..S...........Z...#      M  Banbo (tall teal)   J  Jumbo (big green)   O  Opi the bird (not on the map right now)
 #H....t............#      H  cupboard to hide in (against a wall)    t  kids' table with chairs
+####################      S  shelf / lockers / bookcase / lab tank / swing set    Z  crates / gym mats / slide
 ```
 
-So "add a bird in the top room" is literally typing one `O`. It's dark and first person:
+1 Classroom, 2 Hallway, 3 Library, 4 Lunchroom, 5 Gym, 6 Art Room, 7 Playground (outside, night),
+8 The Abyss (the science lab it all came from). Escape one to unlock the next. Next to each map:
+`timed` (which doors slam shut again and after how many seconds), `monster_scale` (how big),
+`hunt` (how hard they hunt), `tagline` and `exit_hint` (the words on the title screen).
+After changing a map run `python3 tools/check_maps.py` - it says exactly what's wrong ("toy at row 5 can't be reached").
+
+So "add a bird in the top room of chapter 3" is literally typing one `O`. It's dark and first person:
 the scary knobs (`flashlight_*`, `fog_density`, wall colours, `scare_words`) are right under the map,
 and how hard the monsters are is at the top of `scripts/monster.gd`. The title screen has
 EASY / NORMAL / NIGHTMARE (multipliers in `scripts/settings.gd`; it remembers your pick, your
@@ -28,12 +35,17 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 ## Warm-up (30 seconds each) - change a letter, a number or a colour
 
 - "Put 3 more toys in the big room." (add `T`s to the map)
+- "Add a toy to Chapter 2's hallway" / "a tree in the playground" / "another tank in the lab." (a `T`, `^` or `S` on that chapter's map)
+- "Make Chapter 8's creatures even bigger." (`monster_scale` in chapters.gd; the lab ceiling is `wall_height` in kinder.gd's THEMES)
+- "Give me more time on the library door." (`"timed": {"3": 25.0}` -> a bigger number in chapters.gd)
+- "Rename Chapter 5 to THE DUNGEON." (`name` / `tagline` in chapters.gd)
+- "Unlock all the chapters." (`unlocked = 7` in settings.gd, or escape them)
 - "Add another bird next to the start." (add an `O`; `M` and `J` for the other two)
 - "Make the tall one pink." / "Make the bird's legs purple." (`color` per kind in `_apply_kind`, monster.gd)
 - "Make the monsters slower / faster / easier." (`chase_speed`, `see_distance`, `lose_after` in monster.gd)
 - "Give me more time to dodge" / "make Jumbo's swing reach further." (`windup_time`, `commit_before`, `swing_width`, `strike_range` in monster.gd's Attack group)
 - "Make EASY even easier" / "add an IMPOSSIBLE mode." (`TUNING`, `NAMES`, `BLURBS` in settings.gd)
-- "Call the game something else on the title screen." (`"KINDER ESCAPE"` in menu.gd)
+- "Call the game something else on the title screen." (`"THE ABYSS"` in menu.gd)
 - "Make the button sound louder" / "make the door creak longer." (`click` and `door` in sfx.gd)
 - "Make them hear me from further away." (`hear_distance`)
 - "Let the bird follow me anywhere / through doors." (set that monster's `_room = -1` in monster.gd)
@@ -57,6 +69,9 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 ## Small features (1-3 minutes)
 
 - "Add a new room on the right with a purple door and a purple button." (draw it in the map: door `2`, button `b`)
+- "Make the lunchroom's red door a timed door." (add it to that chapter's `timed`)
+- "Make the playground brighter / the moon bigger." (`ambient` in THEMES, `sphere.radius` in `_apply_theme_environment`, kinder.gd)
+- "Make the gym's walls red and gold." (`walls` / `stripes` for `gym` in THEMES, kinder.gd)
 - "Make a secret room only the drone can get into." (surround it with `W`)
 - "Put the exit on the left side instead." (move the `X`)
 - "Make the monsters give up chasing sooner." (`see_distance`)
@@ -67,7 +82,7 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 
 ## Bigger ideas (5-10 minutes) - good for when attention is high
 
-- "Make a level 2 that loads after you escape." (a second `MAP`)
+- "Add a Chapter 9: the basement." (copy a chapter block in chapters.gd, draw a new map, add a theme in kinder.gd's THEMES)
 - "Let me throw a toy to distract the monster."
 - "Make the flashlight run out of battery - find batteries to recharge it."
 - "Add a friendly monster that follows you and blocks the mean ones."

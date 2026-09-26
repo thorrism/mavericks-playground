@@ -1,9 +1,9 @@
 GODOT ?= godot
 BUILD  := build
 
-.PHONY: run arena touch test import editor mac ios ios-sim clean
+.PHONY: run arena touch test maps import editor mac ios ios-sim clean
 
-## Play the game on this Mac (keyboard: WASD / arrows, Space = jump, E = drone, R = restart)
+## Play the game on this Mac (keyboard: WASD / arrows, Space = jump, E = drone, F = flashlight, Esc = pause)
 run: import
 	$(GODOT) --path . -- $(ARGS)
 
@@ -15,9 +15,13 @@ arena: import
 touch: import
 	$(GODOT) --path . -- --touch
 
-## Headless smoke test - fails loudly if the game is broken
-test: import
+## Headless smoke test - fails loudly if the game is broken (checks all 8 chapter maps first)
+test: maps import
 	$(GODOT) --headless --path . -s tests/smoke_test.gd
+
+## Check every chapter map: one start, one exit, every toy/button/door reachable, doors have buttons
+maps:
+	python3 tools/check_maps.py
 
 ## Re-import assets (needed after adding files); safe to run any time
 import:
