@@ -449,6 +449,16 @@ func _test_menus(level: Node3D) -> void:
 	await process_frame
 	_check(menu.mode == menu.Mode.HIDDEN and not paused, "RESUME unfreezes the game")
 
+	# R is not a restart key any more (RESTART is only in the pause menu)
+	var tries_before: int = settings.attempts
+	Input.action_press("restart")
+	await physics_frame
+	await physics_frame
+	Input.action_release("restart")
+	await _settle(5)
+	_check(is_instance_valid(level) and not level.is_queued_for_deletion() and settings.attempts == tries_before,
+		"pressing R does nothing (same level, still try #%d)" % settings.attempts)
+
 
 func _count_in_map(ch: String) -> int:
 	var n := 0

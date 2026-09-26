@@ -22,7 +22,7 @@ So "add a bird in the top room" is literally typing one `O`. It's dark and first
 the scary knobs (`flashlight_*`, `fog_density`, wall colours, `scare_words`) are right under the map,
 and how hard the monsters are is at the top of `scripts/monster.gd`. The title screen has
 EASY / NORMAL / NIGHTMARE (multipliers in `scripts/settings.gd`; it remembers your pick, your
-tries and your best escape time), Esc pauses. Best first prompts:
+tries and your best escape time), Esc pauses (RESTART lives in that menu - no restart key, so nobody hits it by accident). Best first prompts:
 
 ## Warm-up (30 seconds each) - change a letter, a number or a colour
 

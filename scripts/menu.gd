@@ -105,6 +105,7 @@ func _open() -> void:
 	_box.visible = true
 	_pause_tap.visible = false
 	_quit.visible = not OS.has_feature("mobile")
+	TouchControls.release_all()
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_play.grab_focus()
@@ -133,7 +134,7 @@ func _refresh() -> void:
 		stats += "   ·   best %s" % Settings.fmt_time(Settings.best_time)
 	_stats.text = stats
 	_controls.text = ("drag to look   ·   joystick to move   ·   JUMP   ·   DRONE" if TouchControls.is_touch()
-		else "WASD move   ·   mouse look   ·   Space jump   ·   E drone   ·   R restart   ·   Esc pause")
+		else "WASD move   ·   mouse look   ·   Space jump   ·   E drone   ·   Esc pause / restart")
 
 
 # ---------------------------------------------------------------------------

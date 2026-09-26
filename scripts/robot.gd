@@ -82,9 +82,6 @@ func _physics_process(delta: float) -> void:
 	if global_position.y < -10.0:
 		respawn()
 
-	if Input.is_action_just_pressed("restart"):
-		get_tree().reload_current_scene()
-
 
 func respawn() -> void:
 	global_position = _spawn_position
