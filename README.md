@@ -19,7 +19,8 @@ make run        # opens the game window on the Mac
 make touch      # same, but shows the iPhone touch controls (click = finger)
 make test       # 2-second headless check that nothing is broken
 make mac        # double-clickable app -> build/mac/RobotSandbox.app
-make ios-sim    # builds + launches in the iPhone Simulator
+make ios        # Xcode project -> build/ios/RobotSandbox.xcodeproj (see iPhone below)
+make ios-sim    # tries to build + launch in the iPhone Simulator (see caveat below)
 make editor     # opens the Godot editor if you want to poke around visually
 ```
 
@@ -56,3 +57,12 @@ with an 8-year-old's attention span (each one is a ~1-minute change).
 Open it in Xcode, pick your Team under *Signing & Capabilities*, plug in the phone, press Run.
 The placeholder team id in `export_presets.cfg` (`ABCDE12345`) only needs replacing if you
 want Godot to sign the build for you.
+
+## iPhone Simulator caveat
+
+Godot's official iOS template only ships an **x86_64** simulator slice, and iOS 26+ simulator
+runtimes are arm64-only. So on an Apple Silicon Mac `make ios-sim` needs Rosetta plus an
+older runtime (`xcodebuild -downloadPlatform iOS -buildVersion 18.6`) and boots the simulator
+in x86_64 mode. The Xcode project builds and links fine that way, but the Rosetta simulator
+never finished booting on the (virtualised) Mac this was developed on, so the simulator path
+is **unverified**. A real iPhone via Xcode is the reliable route.
