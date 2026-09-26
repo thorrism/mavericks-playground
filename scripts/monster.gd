@@ -7,6 +7,8 @@ extends CharacterBody3D
 ## walking close by, it hunts you: it knows the way around walls, goes to where it last saw
 ## you, searches around there, and only gives up after a while. But each one is tied to the
 ## room it was born in - it can't follow you through a doorway, so a door is always an escape.
+## If it loses you right next to a cupboard, it walks over and looks inside before it gives up -
+## so hide somewhere it DIDN'T see you go.
 ## Touching one doesn't hurt. When it gets close it WINDS UP (arms go high, it roars), turning
 ## to face you - then it COMMITS: the last moment of the wind-up it stops turning and SLAMS down
 ## along a straight lane in front of it. Get out of that lane before the arms land and it misses
@@ -30,6 +32,8 @@ enum Attack { NONE, WINDUP, STRIKE, RECOVER }
 @export var search_time := 4.0         # ...then how long it searches around there
 @export var spawn_grace := 4.0         # seconds after the level starts before it will notice you
 @export var hide_catch_range := 4.0    # if it's already hunting you and this close, a cupboard won't save you
+@export var check_cupboard_range := 3.5 # lost you this close to a cupboard? it goes and looks inside (0 = never)
+@export var peek_time := 1.6           # seconds it stands at the doors, looking in
 @export var gravity := 22.0
 
 @export_group("Attack")
@@ -62,6 +66,10 @@ var _idle_for := 0.0        # standing still, having a look around, between wand
 var _was_seeing := false
 var _was_hidden := false
 var _busted := false        # it watched you climb into the cupboard: hiding won't work this time
+var _last_seen: Vector3     # where you were the last time it had eyes on you
+var _check: Dictionary = {} # the cupboard it's on its way to look into (see Kinder.nearest_cupboard)
+var _checked := Vector2i(-1, -1)   # the one it already looked in this hunt - it won't check it twice
+var _peek_timer := 0.0
 var _hunt_timer := 0.0
 var _search_timer := 0.0
 var _cooldown := 0.0
@@ -114,6 +122,8 @@ var _base_recover_time := 0.0
 var _base_lose_after := 0.0
 var _base_search_time := 0.0
 var _base_spawn_grace := 0.0
+var _base_hide_catch_range := 0.0
+var _base_check_cupboard_range := 0.0
 
 
 func _ready() -> void:
@@ -129,6 +139,8 @@ func _ready() -> void:
 	_base_lose_after = lose_after
 	_base_search_time = search_time
 	_base_spawn_grace = spawn_grace
+	_base_hide_catch_range = hide_catch_range
+	_base_check_cupboard_range = check_cupboard_range
 	_apply_difficulty()
 	Settings.changed.connect(_apply_difficulty)
 	_grace = spawn_grace
@@ -166,6 +178,8 @@ func _apply_difficulty() -> void:
 	lose_after = _base_lose_after * t["persist"]
 	search_time = _base_search_time * t["persist"]
 	spawn_grace = _base_spawn_grace * t["grace"]
+	hide_catch_range = _base_hide_catch_range * t["sight"]
+	check_cupboard_range = _base_check_cupboard_range * t["peek"]
 	if _grace > 0.0 and old_grace > 0.0:
 		_grace = _grace / old_grace * spawn_grace
 
@@ -267,6 +281,13 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= gravity * delta
 
 	var player := _find_player()
+	var hidden := player != null and _is_hidden(player)
+	# climbing in while it's mid-swing at you counts as being watched, however far the lunge carries
+	if hidden and not _was_hidden and (_was_seeing or attack != Attack.NONE) and _flat_distance(player.global_position) < hide_catch_range:
+		_busted = true
+	if not hidden:
+		_busted = false
+	_was_hidden = hidden
 	if attack != Attack.NONE:
 		_attack_step(delta, player)
 		move_and_slide()
@@ -274,12 +295,6 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var awake := _grace <= 0.0
-	var hidden := player != null and _is_hidden(player)
-	if hidden and not _was_hidden and _was_seeing and _flat_distance(player.global_position) < hide_catch_range:
-		_busted = true
-	if not hidden:
-		_busted = false
-	_was_hidden = hidden
 	var sees := awake and player != null and _can_see(player)
 	_was_seeing = sees
 	var hears := awake and player != null and not sees and _can_hear(player)
@@ -290,12 +305,18 @@ func _physics_process(delta: float) -> void:
 		hears = false
 		_hunt_timer = 0.0
 		_search_timer = 0.0
+		_check = {}
+		_peek_timer = 0.0
 		_target = _home
 		_repath_in = minf(_repath_in, 0.0)
 
 	if sees:
 		_idle_for = 0.0
 		_target = player.global_position
+		_last_seen = _target
+		_check = {}
+		_checked = Vector2i(-1, -1)
+		_peek_timer = 0.0
 		_hunt_timer = lose_after
 		_search_timer = search_time
 		if not chasing:
@@ -314,6 +335,39 @@ func _physics_process(delta: float) -> void:
 		_hunt_timer -= delta
 		if _flat_distance(_target) < 1.0:
 			_hunt_timer = 0.0
+		if _hunt_timer <= 0.0:
+			_consider_cupboard()
+	elif chasing and _peek_timer > 0.0:
+		# standing at the cupboard doors, looking in...
+		_peek_timer -= delta
+		_target = global_position
+		var inside: Vector3 = _check["inside"]
+		var to_doors := inside - global_position
+		_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(to_doors.x, to_doors.z), turn_rate * delta)
+		if _peek_timer <= 0.0:
+			if player and _level.cupboard_at(player.global_position) == _check["cell"]:
+				_busted = true
+				_target = player.global_position
+				_last_seen = _target
+				_hunt_timer = lose_after
+				_search_timer = search_time
+				_say(6.0)
+				Game.player_found(self)
+			else:
+				_say(-2.0)
+				_retarget_in = 0.0
+			_check = {}
+	elif chasing and not _check.is_empty():
+		# on its way to a cupboard you might have slipped into
+		_retarget_in -= delta
+		_target = _check["front"]
+		if _flat_distance(_target) < 0.9:
+			_peek_timer = peek_time
+			_play(_step_sound, _step_db + 2.0, 0.7)
+			if _level.has_method("fling_cupboard"):
+				_level.fling_cupboard(_check["cell"])
+		elif _retarget_in <= 0.0:
+			_check = {}   # couldn't get there: never mind
 	elif chasing and _search_timer > 0.0:
 		# ...and poke around nearby for a while
 		_search_timer -= delta
@@ -433,7 +487,7 @@ func _land_strike(player: Node3D) -> void:
 	attack = Attack.RECOVER
 	_attack_timer = recover_time
 	var engaged := player != null and _in_my_room(player.global_position)
-	if engaged and _in_strike_zone(player.global_position):
+	if engaged and _in_strike_zone(player.global_position) and (_busted or not _is_hidden(player)):
 		_play("stomp", 6.0, 0.7)
 		_catch(player)
 		return
@@ -586,6 +640,8 @@ func _catch(_player: Node3D) -> void:
 	chasing = false
 	_hunt_timer = 0.0
 	_search_timer = 0.0
+	_check = {}
+	_peek_timer = 0.0
 	_say(8.0)
 	Game.player_caught(self)
 	_target = _home
@@ -661,6 +717,19 @@ func _pick_wander_target() -> void:
 			_target = candidate
 			break
 	_retarget_in = randf_range(2.0, 5.0)
+	_repath_in = 0.0
+
+
+## Lost you close to a cupboard (and didn't already watch you climb in)? Go and have a look.
+func _consider_cupboard() -> void:
+	if _busted or _level == null or not _level.has_method("nearest_cupboard") or check_cupboard_range <= 0.0:
+		return
+	var c: Dictionary = _level.nearest_cupboard(_last_seen, check_cupboard_range)
+	if c.is_empty() or c["cell"] == _checked or not _in_my_room(c["front"]):
+		return
+	_check = c
+	_checked = c["cell"]
+	_retarget_in = 8.0   # how long it will spend trying to get to the doors
 	_repath_in = 0.0
 
 

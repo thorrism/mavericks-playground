@@ -2,8 +2,8 @@ extends Node3D
 ## A dying ceiling lamp: dim, buzzing, flickers, sometimes goes out completely.
 
 @export var color := Color("9fffb0")
-@export var energy := 1.6
-@export var light_range := 7.0
+@export var energy := 1.1
+@export var light_range := 5.5
 @export var flicker := 0.5        # 0 = steady, 1 = very jittery
 @export var blackout_chance := 0.004   # per frame chance it dies for a moment
 

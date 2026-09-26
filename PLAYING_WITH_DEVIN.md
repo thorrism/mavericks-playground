@@ -44,6 +44,8 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 - "Make the lamps flicker like crazy" / "add a lamp in the start room." (`flicker` in lamp.gd, an `L` on the map)
 - "Put a hiding cupboard in the top room" / "more tables." (an `H` against a wall, a `t` anywhere, on the map)
 - "Let them find me in cupboards if they're closer" (`hide_catch_range` in monster.gd)
+- "Make them check cupboards from further away" / "give me longer before they open the doors" (`check_cupboard_range`, `peek_time` in monster.gd)
+- "Even darker" / "a bit brighter" (`ambient_light_energy` in scenes/kinder.tscn, `energy` in lamp.gd)
 - "More junk on the floor" / "no blood puddles." (the numbers in `_add_clutter`, kinder.gd)
 - "Make the monsters stand around longer." (`_idle_for = randf_range(1.5, 4.5)` in monster.gd)
 - "More creepy noises in the distance." (`_ambient_timer = randf_range(9.0, 22.0)` in spooky_audio.gd)

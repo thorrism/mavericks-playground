@@ -10,11 +10,14 @@ things live here and hunt you if they see or hear you. Find all six toys, use yo
 reach buttons the robot can't, open the coloured doors, and escape through the golden exit
 at the very top of the school.
 
-- Almost no light: your **flashlight**, a few dying ceiling lamps that flicker, and the glow of the toys.
+- Almost no light: your **flashlight** (`F` switches it off - then it's just the dying ceiling lamps,
+  the glow of the toys and their eyes).
 - Grimy **coloured walls** with stripes, torn posters, bloody handprints and words scrawled on them;
   little tables and chairs, spilt building blocks, drawings and dark puddles on the floor.
-- **Hide**: step into an open cupboard (`H` on the map) and they can't see or hear you - unless one
-  was right behind you when you climbed in. Your heartbeat tells you when one is close.
+- **Hide**: step into an open cupboard (`H` on the map); the doors creak shut behind you and they
+  can't see or hear you - unless one was right behind you when you climbed in. Your heartbeat tells
+  you when one is close. On NORMAL and NIGHTMARE a monster that loses you *next to* a cupboard
+  comes over, flings the doors open and looks inside (`BANBO FOUND YOU`). On EASY cupboards always work.
 - Now and then something thuds, clacks or giggles in another room. It's nothing. Probably.
 - Step on a **button** (or land the drone on it) and the door of the same colour opens.
 - **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
@@ -43,6 +46,7 @@ at the very top of the school.
 | Move | WASD or arrow keys (relative to where you look) | left joystick |
 | Jump / drone up | Space (hold to fly the drone up) | JUMP button |
 | Switch robot <-> drone | E | DRONE button |
+| Flashlight on / off | F | - |
 | Restart | Esc -> RESTART | `II` -> RESTART |
 
 Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
