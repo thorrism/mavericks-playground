@@ -1,0 +1,10 @@
+# Godot
+.godot/
+*.import
+# builds
+build/
+*.app
+*.ipa
+*.xcresult
+# OS
+.DS_Store

@@ -1,0 +1,227 @@
+[gd_scene load_steps=20 format=3]
+
+[ext_resource type="Script" path="res://scripts/arena.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/robot.tscn" id="2_robot"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="3_hud"]
+[ext_resource type="Script" path="res://scripts/touch_controls.gd" id="4_touch"]
+
+[sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
+sky_top_color = Color(0.25, 0.55, 1, 1)
+sky_horizon_color = Color(0.75, 0.85, 1, 1)
+ground_bottom_color = Color(0.45, 0.7, 1, 1)
+ground_horizon_color = Color(0.75, 0.85, 1, 1)
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("Sky_mat")
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+ambient_light_source = 3
+ambient_light_energy = 0.6
+tonemap_mode = 2
+glow_enabled = true
+
+[sub_resource type="BoxMesh" id="FloorMesh"]
+size = Vector3(30, 1, 30)
+
+[sub_resource type="StandardMaterial3D" id="FloorMat"]
+albedo_color = Color(0.55, 0.8, 0.45, 1)
+roughness = 0.9
+
+[sub_resource type="BoxShape3D" id="FloorShape"]
+size = Vector3(30, 1, 30)
+
+[sub_resource type="BoxMesh" id="WallMeshX"]
+size = Vector3(30, 1.5, 0.5)
+
+[sub_resource type="BoxShape3D" id="WallShapeX"]
+size = Vector3(30, 1.5, 0.5)
+
+[sub_resource type="BoxMesh" id="WallMeshZ"]
+size = Vector3(0.5, 1.5, 30)
+
+[sub_resource type="BoxShape3D" id="WallShapeZ"]
+size = Vector3(0.5, 1.5, 30)
+
+[sub_resource type="StandardMaterial3D" id="WallMat"]
+albedo_color = Color(0.95, 0.6, 0.25, 1)
+roughness = 0.7
+
+[sub_resource type="BoxMesh" id="BlockMesh"]
+size = Vector3(3, 2.5, 3)
+
+[sub_resource type="BoxShape3D" id="BlockShape"]
+size = Vector3(3, 2.5, 3)
+
+[sub_resource type="StandardMaterial3D" id="BlockMat"]
+albedo_color = Color(0.85, 0.35, 0.75, 1)
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="RampMesh"]
+size = Vector3(4, 0.4, 7)
+
+[sub_resource type="BoxShape3D" id="RampShape"]
+size = Vector3(4, 0.4, 7)
+
+[node name="Arena" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 12, 0)
+light_energy = 1.3
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.766044, 0.642788, 0, -0.642788, 0.766044, 0, 7.5, 9.5)
+fov = 60.0
+
+[node name="Arena" type="Node3D" parent="."]
+
+[node name="Floor" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/Floor"]
+mesh = SubResource("FloorMesh")
+material_override = SubResource("FloorMat")
+
+[node name="Shape" type="CollisionShape3D" parent="Arena/Floor"]
+shape = SubResource("FloorShape")
+
+[node name="WallNorth" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, -15)
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/WallNorth"]
+mesh = SubResource("WallMeshX")
+material_override = SubResource("WallMat")
+
+[node name="Shape" type="CollisionShape3D" parent="Arena/WallNorth"]
+shape = SubResource("WallShapeX")
+
+[node name="WallSouth" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 15)
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/WallSouth"]
+mesh = SubResource("WallMeshX")
+material_override = SubResource("WallMat")
+
+[node name="Shape" type="CollisionShape3D" parent="Arena/WallSouth"]
+shape = SubResource("WallShapeX")
+
+[node name="WallEast" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0.75, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/WallEast"]
+mesh = SubResource("WallMeshZ")
+material_override = SubResource("WallMat")
+
+[node name="Shape" type="CollisionShape3D" parent="Arena/WallEast"]
+shape = SubResource("WallShapeZ")
+
+[node name="WallWest" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 0.75, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/WallWest"]
+mesh = SubResource("WallMeshZ")
+material_override = SubResource("WallMat")
+
+[node name="Shape" type="CollisionShape3D" parent="Arena/WallWest"]
+shape = SubResource("WallShapeZ")
+
+[node name="TallBlock" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 1.25, -9)
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/TallBlock"]
+mesh = SubResource("BlockMesh")
+material_override = SubResource("BlockMat")
+
+[node name="Shape" type="CollisionShape3D" parent="Arena/TallBlock"]
+shape = SubResource("BlockShape")
+
+[node name="Ramp" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 0.939693, -0.34202, 0, 0.34202, 0.939693, 9, 1.2, 11)
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/Ramp"]
+mesh = SubResource("RampMesh")
+material_override = SubResource("BlockMat")
+
+[node name="Shape" type="CollisionShape3D" parent="Arena/Ramp"]
+shape = SubResource("RampShape")
+
+[node name="Robot" parent="." instance=ExtResource("2_robot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("3_hud")
+
+[node name="ScoreLabel" type="Label" parent="HUD"]
+offset_left = 24.0
+offset_top = 16.0
+offset_right = 400.0
+offset_bottom = 70.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 40
+text = "Score: 0"
+
+[node name="MessageLabel" type="Label" parent="HUD"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -500.0
+offset_top = -200.0
+offset_right = 500.0
+offset_bottom = -120.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 0.95, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 48
+text = "Collect all the batteries!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TouchControls" type="CanvasLayer" parent="."]
+script = ExtResource("4_touch")
+
+[node name="Joystick" type="ColorRect" parent="TouchControls"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 60.0
+offset_top = -260.0
+offset_right = 260.0
+offset_bottom = -60.0
+grow_vertical = 0
+mouse_filter = 2
+color = Color(1, 1, 1, 0.15)
+
+[node name="Knob" type="ColorRect" parent="TouchControls/Joystick"]
+offset_left = 60.0
+offset_top = 60.0
+offset_right = 140.0
+offset_bottom = 140.0
+mouse_filter = 2
+color = Color(1, 1, 1, 0.6)
+
+[node name="JumpButton" type="Button" parent="TouchControls"]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -260.0
+offset_right = -60.0
+offset_bottom = -60.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 40
+text = "JUMP"

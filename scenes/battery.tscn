@@ -1,0 +1,44 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/battery.gd" id="1_battery"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_body"]
+top_radius = 0.3
+bottom_radius = 0.3
+height = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_body"]
+albedo_color = Color(0.2, 0.9, 0.4, 1)
+metallic = 0.4
+roughness = 0.3
+emission_enabled = true
+emission = Color(0.1, 0.6, 0.2, 1)
+emission_energy_multiplier = 0.8
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tip"]
+top_radius = 0.12
+bottom_radius = 0.12
+height = 0.15
+
+[sub_resource type="StandardMaterial3D" id="Material_tip"]
+albedo_color = Color(0.9, 0.9, 0.95, 1)
+metallic = 0.8
+roughness = 0.2
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_1"]
+radius = 0.7
+
+[node name="Battery" type="Area3D" groups=["battery"]]
+script = ExtResource("1_battery")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("CylinderMesh_body")
+material_override = SubResource("Material_body")
+
+[node name="Tip" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.475, 0)
+mesh = SubResource("CylinderMesh_tip")
+material_override = SubResource("Material_tip")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_1")

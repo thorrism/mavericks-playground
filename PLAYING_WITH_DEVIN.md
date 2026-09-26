@@ -1,0 +1,69 @@
+# Playing with Devin
+
+How a session goes: you (or your kid) describe a change, Devin edits a file or two,
+runs `make test` and `make run`, and shows a screenshot. Aim for one small idea per prompt -
+every prompt below is a 1-3 minute change so nobody gets bored waiting.
+
+**Tip for Devin:** always `make test && make run`, take a screenshot (`screencapture`), and
+attach it. Kids want to *see* it. Keep the code in the existing files; no new systems unless asked.
+
+## Kinder Escape - the level is a text map
+
+The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
+
+```
+##########X#########      #  wall        T  toy        M  monster
+#..................#      W  low wall (drone only)     =  fence (jump over)
+#.T....M.........T.#      1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
+```
+
+So "add a monster in the top room" is literally typing one `M`. Best first prompts:
+
+## Warm-up (30 seconds each) - change a letter, a number or a colour
+
+- "Put 3 more toys in the big room." (add `T`s to the map)
+- "Add another monster next to the start." (add an `M`)
+- "Make the monsters pink." / "Make the green monster GIANT." (`MONSTER_COLORS`, `height` in monster.gd)
+- "Make the monsters slower / faster." (`chase_speed` in monster.gd)
+- "Make the walls black and the floor lava." (colours at the top of kinder.gd)
+- "Make the drone go super fast." (`speed` in drone.gd)
+- "Make the robot red with a round head." (ROBOT DESIGN in robot.gd)
+- "Change the monster's face - make it say 'Boo hoo!' when it catches me." (`caught_text`)
+
+## Small features (1-3 minutes)
+
+- "Add a new room on the right with a purple door and a purple button." (draw it in the map: door `2`, button `b`)
+- "Make a secret room only the drone can get into." (surround it with `W`)
+- "Put the exit on the left side instead." (move the `X`)
+- "Make the monsters give up chasing sooner." (`see_distance`)
+- "Add a timer that counts how long the escape took."
+- "Make the toys spin faster and glow more."
+- "When you escape, show fireworks / say 'MAVERICK WINS!'."
+- "Put a fence maze in the middle room."
+
+## Bigger ideas (5-10 minutes) - good for when attention is high
+
+- "Make a level 2 that loads after you escape." (a second `MAP`)
+- "Let me throw a toy to distract the monster."
+- "Give the drone a flashlight and make the rooms dark."
+- "Add a friendly monster that follows you and blocks the mean ones."
+- "Add keys: a red key opens the red door instead of a button."
+- "Add a monster that only moves when you're not looking at it."
+- "Make the monster's eyes glow and play a scary (silly) sound when it sees you."
+
+## The old arena is still there
+
+`make arena` runs the original battery-collecting game (`scenes/arena.tscn`). All the old
+prompts still work on it: "add 20 batteries", "add a ramp", "make the robot huge", etc.
+
+## Totally different game? Also fine
+
+The engine doesn't care that it's robots and monsters. Reuse `robot.gd` as any character,
+draw a different map, or start a new `scenes/whatever.tscn` and point `run/main_scene` in
+`project.godot` at it. Ideas that fit the same skeleton: dinosaur collecting eggs, spaceship
+dodging asteroids, cat knocking cups off tables, racing a car through cones.
+
+## Checking it on the phone
+
+- `make touch` shows the on-screen joystick + JUMP + DRONE buttons on the Mac (click and drag = finger).
+- Real iPhone: `make ios`, open `build/ios/RobotSandbox.xcodeproj` in Xcode and press Run.
