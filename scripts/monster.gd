@@ -30,13 +30,13 @@ enum Attack { NONE, WINDUP, STRIKE, RECOVER }
 @export var gravity := 22.0
 
 @export_group("Attack")
-@export var strike_range := 2.4        # it starts its swing when you're this close, in front of it
-@export var strike_arc := 60.0         # degrees: how wide the swing is - sidestep out of this to dodge
-@export var windup_time := 0.55        # seconds of arms-up warning before the swing (your time to move)
+@export var strike_range := 2.8        # it starts its swing when you're this close, in front of it
+@export var strike_arc := 70.0         # degrees: how wide the swing is - sidestep out of this to dodge
+@export var windup_time := 0.5         # seconds of arms-up warning before the swing (your time to move)
 @export var strike_time := 0.18        # how long the swing itself takes
-@export var recover_time := 1.0        # seconds it is stuck after a swing
-@export var lunge := 1.0               # metres it throws itself forward during the swing
-@export var track_rate := 1.5          # radians/s it can turn while winding up (you can sidestep faster)
+@export var recover_time := 0.8        # seconds it is stuck after a swing
+@export var lunge := 1.5               # metres it throws itself forward during the swing (backing off alone won't save you)
+@export var track_rate := 1.8          # radians/s it can turn while winding up (a lazy sidestep gets tracked)
 
 ## Nothing may poke through the ceiling (walls are 3 m).
 const MAX_TOP := 2.8
@@ -148,13 +148,13 @@ func _apply_kind() -> void:
 			hear_distance = 4.0
 			lose_after = 2.5
 			search_time = 5.0
-			strike_range = 3.2
-			strike_arc = 75.0
-			windup_time = 0.8
+			strike_range = 3.6
+			strike_arc = 90.0
+			windup_time = 0.7
 			strike_time = 0.22
-			recover_time = 1.4
-			lunge = 1.6
-			track_rate = 1.2
+			recover_time = 1.2
+			lunge = 2.2
+			track_rate = 1.4
 			_step_len = 1.3
 			_swing_amp = 0.5
 			_knee_amp = 0.7
@@ -175,12 +175,13 @@ func _apply_kind() -> void:
 			hear_distance = 2.5
 			lose_after = 1.5
 			search_time = 3.0
-			strike_range = 2.0
-			strike_arc = 45.0
-			windup_time = 0.45
+			strike_range = 2.4
+			strike_arc = 55.0
+			windup_time = 0.4
 			strike_time = 0.14
-			recover_time = 0.8
-			lunge = 0.8
+			recover_time = 0.7
+			lunge = 1.2
+			track_rate = 2.2
 			_step_len = 1.3
 			_swing_amp = 0.5
 			_knee_amp = 0.0
@@ -359,12 +360,14 @@ func _attack_step(delta: float, player: Node3D) -> void:
 func _land_strike(player: Node3D) -> void:
 	attack = Attack.RECOVER
 	_attack_timer = recover_time
-	if player and _in_my_room(player.global_position) and _in_strike_zone(player.global_position):
+	var engaged := player != null and _in_my_room(player.global_position)
+	if engaged and _in_strike_zone(player.global_position):
 		_play("stomp", 6.0, 0.7)
 		_catch(player)
 		return
 	_play("stomp", 3.0, randf_range(0.8, 0.95))
-	Game.player_missed(self)
+	if engaged:
+		Game.player_missed(self)   # no jolt if you're already out the door or off in the drone
 
 
 ## Is this spot under the swing: in front of it, in reach, inside the arc?
@@ -372,7 +375,7 @@ func _in_strike_zone(pos: Vector3) -> bool:
 	var to_pos := pos - global_position
 	to_pos.y = 0.0
 	var dist := to_pos.length()
-	if dist > strike_range * 0.9 + 0.3:
+	if dist > strike_range:
 		return false
 	if dist < 0.8:
 		return true   # right under it: no dodging that

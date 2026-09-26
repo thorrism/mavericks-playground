@@ -313,6 +313,28 @@ func _test_kinder() -> void:
 		frames += 1
 	_check(monster.attack == monster.Attack.NONE and frames > 20, "...and it is stuck recovering for a moment (%d frames)" % frames)
 
+	# get out of its room while it's winding up: the swing lands on nothing and you don't even feel it
+	monster._cooldown = 0.0
+	monster.chasing = true
+	monster._hunt_timer = 10.0
+	monster.global_position = robot.global_position + Vector3(0, 0, 1.6)
+	monster._visual.rotation.y = PI
+	await _settle(3)
+	_check(monster.attack == monster.Attack.WINDUP, "winding up again")
+	monster._room = 999   # you are now in "another room" as far as it's concerned
+	frames = 0
+	while monster.attack == monster.Attack.WINDUP or monster.attack == monster.Attack.STRIKE:
+		await physics_frame
+		frames += 1
+		if frames > 120:
+			break
+	_check(missed[0] == 1 and not level._caught, "no 'MISSED YOU' jolt when you've already left its room (misses=%d)" % missed[0])
+	frames = 0
+	while monster.attack != monster.Attack.NONE and frames < 200:
+		await physics_frame
+		frames += 1
+	monster._room = -1
+
 	# stand still in front of it: the swing lands, jump-scare (frozen, screen goes dark), then the LEVEL RESTARTS
 	monster._cooldown = 0.0
 	monster.chasing = true
