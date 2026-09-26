@@ -1,6 +1,7 @@
 extends Node
 ## Things that survive between plays (autoloaded as `Settings`, saved to user://kinder.cfg):
-## the difficulty you picked and your records. The title screen shows and changes these.
+## the difficulty you picked, which chapter you're on, how far you've got, and your records.
+## The title screen shows and changes these.
 
 signal changed
 
@@ -25,19 +26,43 @@ const TUNING: Array[Dictionary] = [
 const PATH := "user://kinder.cfg"
 
 var difficulty: int = Difficulty.NORMAL
+var chapter := 0         # the chapter you're playing (0-based: 0 = Chapter 1)
+var unlocked := 0        # the highest chapter you may play (escape a chapter to unlock the next)
 var attempts := 0
 var escapes := 0
-var best_time := 0.0   # seconds; 0 = never escaped
-var persist := true    # tests turn this off so they don't touch your records
+var best_time := 0.0     # seconds, any chapter; 0 = never escaped
+var best_times: Array[float] = []   # per chapter; 0 = never escaped that one
+var persist := true      # tests turn this off so they don't touch your records
 
 
 func _ready() -> void:
+	best_times.resize(Chapters.count())
+	best_times.fill(0.0)
 	var cfg := ConfigFile.new()
 	if cfg.load(PATH) == OK:
 		difficulty = clampi(cfg.get_value("game", "difficulty", Difficulty.NORMAL), 0, NAMES.size() - 1)
+		unlocked = clampi(cfg.get_value("game", "unlocked", 0), 0, Chapters.count() - 1)
+		chapter = clampi(cfg.get_value("game", "chapter", 0), 0, unlocked)
 		attempts = cfg.get_value("records", "attempts", 0)
 		escapes = cfg.get_value("records", "escapes", 0)
 		best_time = cfg.get_value("records", "best_time", 0.0)
+		for i in best_times.size():
+			best_times[i] = cfg.get_value("records", "best_time_%d" % (i + 1), 0.0)
+
+
+## Pick a chapter to play. Locked chapters can't be picked (returns false).
+func set_chapter(c: int) -> bool:
+	if c < 0 or c >= Chapters.count() or c > unlocked:
+		return false
+	if c != chapter:
+		chapter = c
+		save()
+		changed.emit()
+	return true
+
+
+func is_unlocked(c: int) -> bool:
+	return c >= 0 and c <= unlocked
 
 
 func set_difficulty(d: int) -> void:
@@ -57,13 +82,18 @@ func record_attempt() -> void:
 	save()
 
 
-## Returns true if this was a new record.
-func record_escape(seconds: float) -> bool:
+## Escaped chapter c in `seconds`: unlocks the next chapter. Returns true if this was a new
+## record for that chapter.
+func record_escape(c: int, seconds: float) -> bool:
 	escapes += 1
-	var record := best_time <= 0.0 or seconds < best_time
-	if record:
+	if best_time <= 0.0 or seconds < best_time:
 		best_time = seconds
+	var record := best_times[c] <= 0.0 or seconds < best_times[c]
+	if record:
+		best_times[c] = seconds
+	unlocked = clampi(maxi(unlocked, c + 1), 0, Chapters.count() - 1)
 	save()
+	changed.emit()
 	return record
 
 
@@ -72,9 +102,13 @@ func save() -> void:
 		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("game", "difficulty", difficulty)
+	cfg.set_value("game", "chapter", chapter)
+	cfg.set_value("game", "unlocked", unlocked)
 	cfg.set_value("records", "attempts", attempts)
 	cfg.set_value("records", "escapes", escapes)
 	cfg.set_value("records", "best_time", best_time)
+	for i in best_times.size():
+		cfg.set_value("records", "best_time_%d" % (i + 1), best_times[i])
 	cfg.save(PATH)
 
 

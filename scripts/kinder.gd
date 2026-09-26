@@ -1,53 +1,109 @@
 extends Node3D
-## THE ABYSS - a dark, abandoned kindergarten you have to escape from. First person.
+## THE ABYSS - a dark, abandoned school you have to escape from, one chapter at a time. First person.
 ## You have a flashlight. THEY have very good eyes - and they know the way around.
-## The whole level is drawn with the text map below. Edit the map = edit the level!
+## Every chapter is a text map in scripts/chapters.gd. Edit the map = edit the chapter!
 ##
-##   #  wall              .  floor            P  where you start
+##   #  wall (a hedge outside)   .  floor      P  where you start
 ##   W  low wall (only the drone can fly over it)
 ##   =  fence (you can jump over it - THEY just step over it)
 ##   T  toy to collect                         X  exit door (opens when all toys are found)
 ##   M  the tall one (Banban-ish)   J  the giant (Jumbo Josh-ish)   O  the bird (Opila-ish, not used right now)
-##   L  a flickering ceiling lamp
+##   L  a flickering ceiling lamp (a street lamp outside)
 ##   H  a cupboard you can hide in (put it against a wall). Inside, THEY can't see you -
 ##      unless one was already right behind you when you climbed in.
 ##   t  a little kids' table with chairs (solid: THEY have to walk around it - but they see over it)
+##   S  a tall shelf: lockers / bookcase / a lab tank - swings on the playground     (solid)
+##   Z  stacked crates or gym mats - a slide on the playground                       (solid)
+##   ^  a pillar - a tree on the playground                                          (solid)
 ##   1 2 3  doors         a b c  buttons       button a opens door 1, b opens 2, c opens 3
+##          a chapter can make a door TIMED: it slams shut again after a while (press a button again)
 ##
 ## Every letter is one tile (TILE metres wide). Rows must all be the same length.
 
-const MAP: Array[String] = [
-	"##########X#########",
-	"#H.................#",
-	"#.T....t.....L...T.#",
-	"#......J..........H#",
-	"#....T.............#",
-	"##########3#########",
-	"#......#...........#",
-	"#..T..H#...........#",
-	"#..L...#.....===...#",
-	"#.M....#.....=a=...#",
-	"#..t...#.....===...#",
-	"#WWWWW.#...........#",
-	"#.c..W.1..........H#",
-	"#....W.#.....P.....#",
-	"#WWWWW.#.....L.....#",
-	"#......#..T...t....#",
-	"#..T...#...........#",
-	"####################",
-]
+## The map of the chapter being played (copied from Chapters.CHAPTERS[chapter] in _ready).
+var MAP: Array[String] = []
+var chapter := 0
+var chapter_def: Dictionary = {}
+var theme: Dictionary = {}
+var outdoors := false          # no ceiling, night sky, street lamps; THEY can be as tall as they like
+var wall_height := 3.0
+var monster_scale := 1.0       # how big THEY are in this chapter
+var hunt := 1.0                # how far THEY see / hear and how long they keep hunting, this chapter
 
 const MONSTER_LETTERS := "MJO"
 
 const TILE := 2.0
-const WALL_HEIGHT := 3.0
 const LOW_WALL_HEIGHT := 1.6
 const FENCE_HEIGHT := 0.7
+
+## How each chapter is decorated. Anything missing falls back to the classroom look.
+##   floor / ceiling / walls / stripes / words  colours + what's scrawled on the walls
+##   decor       posters, handprints and scrawls on the walls (off outside)
+##   outdoors    no ceiling, night sky, moon, street lamps, hedges for walls
+##   wall_height taller rooms as the chapters go on, so the bigger creatures fit under the ceiling
+##   ambient     background light (0.07 is the dark school; the moonlit playground is a little brighter)
+##   glow        the lamps' colour; tanks and crates glow this colour in the lab
+const THEMES: Dictionary = {
+	"classroom": {},
+	"hallway": {
+		"wall_height": 3.2,
+		"floor": Color("3e3f44"), "walls": [Color("5a6a7a"), Color("6a5a48"), Color("4d6a5a")],
+		"stripes": [Color("a8c0d8"), Color("d8b890"), Color("98c8a8")],
+		"words": ["RUN", "don't stop", "it walks the hall at night", "HELP", "they can hear you", "lockers won't save you"],
+		"shelf": Color("5a6068"), "table": Color("6a6a70"),
+	},
+	"library": {
+		"wall_height": 3.4,
+		"floor": Color("4a3a30"), "walls": [Color("5a3e2c"), Color("4c4a3a"), Color("6a4a3a")],
+		"stripes": [Color("c8a878"), Color("b8b080"), Color("d0a080")],
+		"words": ["shhh", "quiet", "it reads in the dark", "HELP", "don't turn the page", "they can hear you"],
+		"shelf": Color("4a3020"), "table": Color("5a4030"), "lamps": [Color("ffb070"), Color("ffd090")],
+	},
+	"lunchroom": {
+		"wall_height": 3.5,
+		"floor": Color("5a5850"), "walls": [Color("7a7a4a"), Color("8a5a4a"), Color("4a6a6a")],
+		"stripes": [Color("e0d890"), Color("e0a898"), Color("98c8c8")],
+		"words": ["EAT", "hungry", "it's still hungry", "HELP", "they can smell you", "don't eat that"],
+		"table": Color("8a8070"), "table_size": Vector3(1.8, 0.58, 0.9), "lamps": [Color("ffe0a0"), Color("c0ffc0")],
+	},
+	"gym": {
+		"wall_height": 4.2,
+		"floor": Color("6a5a3a"), "walls": [Color("3a5a8a"), Color("8a3a3a"), Color("5a5a5a")],
+		"stripes": [Color("90b0e0"), Color("e09090"), Color("c0c0c0")],
+		"words": ["RUN FASTER", "jump", "it never gets tired", "HELP", "no time outs", "they can hear you"],
+		"crate": Color("2a4a8a"), "table": Color("6a6a6a"), "lamps": [Color("ffffff"), Color("e0e0ff")],
+	},
+	"art": {
+		"wall_height": 3.8,
+		"floor": Color("4a4048"), "walls": [Color("8a3a6a"), Color("3a7a8a"), Color("8a7a2a"), Color("5a3a8a")],
+		"stripes": [Color("e090c0"), Color("90d0e0"), Color("e0d070"), Color("b090e0")],
+		"words": ["it's not paint", "draw me", "HELP", "RED", "they can hear you", "look what I made"],
+		"table": Color("9a8a7a"), "crate": Color("7a6a5a"),
+	},
+	"playground": {
+		"outdoors": true, "decor": false, "ambient": 0.10,
+		"floor": Color("22301c"), "outside": Color("151e12"), "walls": [Color("1e3a1e"), Color("243e22")],
+		"low_wall": Color("4a3a34"), "fence": Color("555a5e"), "shelf": Color("6a3a2a"), "crate": Color("8a3a2a"),
+		"lamps": [Color("ffd9a0")], "words": [],
+	},
+	"lab": {
+		"wall_height": 5.4, "ambient": 0.05, "glow": Color("46ff70"),
+		"floor": Color("2a2e2c"), "ceiling": Color("1a1c1c"), "walls": [Color("3a4a48"), Color("4a4a52"), Color("2e3e3e")],
+		"stripes": [Color("80c0b0"), Color("a0a0c0"), Color("70b0a0")],
+		"words": ["SUBJECT 7 ESCAPED", "it went wrong", "seal the lab", "HELP", "we made them", "DON'T OPEN THE TANKS", "they grew"],
+		"shelf": Color("2a3a3a"), "crate": Color("3a3a3a"), "table": Color("5a6a6a"), "lamps": [Color("70ff90"), Color("c0ffd0")],
+	},
+}
 
 # Colours - faded kindergarten paint under years of grime. Change these to redecorate!
 const FLOOR_COLOR := Color("4a4640")
 const CEILING_COLOR := Color("2a2826")
 const OUTSIDE_COLOR := Color("101a10")
+const SHELF_COLOR := Color("4a3a2a")
+const CRATE_COLOR := Color("6a5a3a")
+const PILLAR_COLOR := Color("3a3a3a")
+const TREE_COLORS: Array[Color] = [Color("1a2e18"), Color("22381e")]
+const BOOK_COLORS: Array[Color] = [Color("6a2a2a"), Color("2a3a6a"), Color("5a5a2a"), Color("2a4a3a"), Color("4a2a5a")]
 const WALL_COLORS: Array[Color] = [Color("7a4f62"), Color("4b7a78"), Color("8c7a3c"), Color("5f7d4b"), Color("5c4d80"), Color("8a5a3a")]
 const STRIPE_COLORS: Array[Color] = [Color("d9a6bd"), Color("9bd6d0"), Color("e8d27a"), Color("b3d69b"), Color("b3a0e0"), Color("e0a880")]
 const SKIRTING_COLOR := Color("1c1a18")
@@ -115,6 +171,7 @@ var _flicker := 0.0
 var _scare_flash := 0.0
 var _time := 0.0
 var _toy_count := 0
+var _door_timers: Dictionary = {}   # door node -> seconds until a timed door slams shut again
 var _rooms: Dictionary = {}   # Vector2i cell -> room number
 var _cupboards: Dictionary = {}   # Vector2i cell -> Vector3 direction the open front faces
 var hiding := false   # true while you're tucked inside a cupboard
@@ -128,6 +185,7 @@ const DOOR_SHUT_GAP := 0.05                        # a crack of light between th
 
 func _ready() -> void:
 	Game.hiding = false
+	_load_chapter(Settings.chapter)
 	_world = Node3D.new()
 	_world.name = "World"
 	add_child(_world)
@@ -159,6 +217,7 @@ func _ready() -> void:
 	flashlight.light_energy = flashlight_energy
 	flashlight.spot_angle = flashlight_angle
 	env.environment.fog_density = fog_density
+	_apply_theme_environment()
 
 	fade.modulate.a = 1.0
 	create_tween().tween_property(fade, "modulate:a", 0.0, 2.0)
@@ -166,9 +225,11 @@ func _ready() -> void:
 	_yaw = 0.0   # face "up" the map, towards the fence and the first door
 	_update_camera(0.0)
 
+	hud.subtitle = Chapters.title(chapter).to_lower()
 	menu.opened.connect(func() -> void: hud.visible = false)
 	menu.play.connect(_on_menu_play)
 	menu.restart.connect(_restart)
+	menu.chapter_picked.connect(_on_chapter_picked)
 	if Game.title_pending:
 		# first boot / just escaped: the title screen, with the level frozen behind it
 		Game.title_pending = false
@@ -177,6 +238,69 @@ func _ready() -> void:
 	else:
 		menu.hide_menu()
 		_begin_run()
+
+
+## Which chapter we're in, and what it looks like. Everything below reads MAP / theme from here.
+func _load_chapter(index: int) -> void:
+	chapter = clampi(index, 0, Chapters.count() - 1)
+	chapter_def = Chapters.get_chapter(chapter)
+	MAP.assign(chapter_def["map"])
+	theme = THEMES.get(chapter_def.get("theme", "classroom"), {})
+	outdoors = theme.get("outdoors", false)
+	wall_height = theme.get("wall_height", 3.0)
+	monster_scale = chapter_def.get("monster_scale", 1.0)
+	hunt = chapter_def.get("hunt", 1.0)
+
+
+## Night sky and moonlight outside; a little darker / greener in the lab.
+func _apply_theme_environment() -> void:
+	var e: Environment = env.environment.duplicate()
+	env.environment = e
+	e.ambient_light_energy = theme.get("ambient", 0.07)
+	var moon: DirectionalLight3D = get_node_or_null("Moon")
+	if outdoors:
+		var sky := Sky.new()
+		var sky_mat := ProceduralSkyMaterial.new()
+		sky_mat.sky_top_color = Color(0.01, 0.015, 0.04)
+		sky_mat.sky_horizon_color = Color(0.04, 0.05, 0.09)
+		sky_mat.ground_bottom_color = Color(0.0, 0.0, 0.0)
+		sky_mat.ground_horizon_color = Color(0.03, 0.04, 0.06)
+		sky_mat.sun_angle_max = 0.0
+		sky.sky_material = sky_mat
+		e.background_mode = Environment.BG_SKY
+		e.sky = sky
+		e.fog_density = fog_density * 0.5
+		e.fog_light_color = Color(0.03, 0.04, 0.07)
+		e.ambient_light_color = Color(0.4, 0.5, 0.8)
+		if moon:
+			moon.light_energy = 0.35
+		# the moon itself, hanging low over the far hedge
+		var moon_ball := MeshInstance3D.new()
+		moon_ball.name = "Moon"
+		var sphere := SphereMesh.new()
+		sphere.radius = 6.0
+		sphere.height = 12.0
+		moon_ball.mesh = sphere
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.85, 0.88, 1.0)
+		mat.emission_enabled = true
+		mat.emission = Color(0.7, 0.75, 0.95)
+		mat.emission_energy_multiplier = 1.4
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		moon_ball.material_override = mat
+		moon_ball.position = Vector3(-70, 55, -140)
+		_world.add_child(moon_ball)
+	elif theme.has("glow"):
+		e.ambient_light_color = Color(0.3, 0.5, 0.4)
+		e.fog_light_color = Color(0.01, 0.03, 0.02)
+
+
+## Picked another chapter on the title screen: rebuild behind the menu.
+func _on_chapter_picked(index: int) -> void:
+	if index == chapter or _playing:
+		return
+	Game.title_pending = true
+	_restart()
 
 
 ## PLAY on the title screen, or RESUME from the pause menu.
@@ -226,6 +350,7 @@ func _process(delta: float) -> void:
 
 	if not _escaped and not _caught and robot.global_position.z < _exit_z - TILE * 0.5:
 		_on_escaped()
+	_tick_timed_doors(delta)
 
 	var hidden_now: bool = not drone.active and is_hidden(robot.global_position)
 	if hidden_now != hiding:
@@ -354,7 +479,7 @@ func _on_all_toys_found() -> void:
 		beacon.omni_range = 9.0
 		beacon.position.y = 2.2
 		exit_door.add_child(beacon)
-	Game.say("ALL TOYS FOUND.  The GOLDEN DOOR at the top of the school is open.  RUN!", 6.0)
+	Game.say("ALL TOYS FOUND.  %s" % chapter_def.get("exit_hint", "The GOLDEN DOOR is open.  RUN!"), 6.0)
 
 
 ## You made it out: freeze, fade to white-gold, and start a fresh level.
@@ -365,11 +490,18 @@ func _on_escaped() -> void:
 	robot.active = false
 	robot.velocity = Vector3.ZERO
 	hud.stop_clock()
-	var record := Settings.record_escape(hud.elapsed)
-	Game.last_result = "YOU ESCAPED in %s%s" % [Settings.fmt_time(hud.elapsed), "   -   NEW RECORD!" if record else ""]
+	var record := Settings.record_escape(chapter, hud.elapsed)
+	var last := chapter >= Chapters.count() - 1
+	var result := "CHAPTER %d ESCAPED in %s%s" % [chapter + 1, Settings.fmt_time(hud.elapsed), "   -   NEW RECORD!" if record else ""]
+	if last:
+		result += "\nYOU GOT OUT OF THE ABYSS.  ALL 8 CHAPTERS."
+	else:
+		result += "\nCHAPTER %d UNLOCKED: %s" % [chapter + 2, Chapters.get_chapter(chapter + 1)["name"]]
+		Settings.set_chapter(chapter + 1)   # the next one is waiting behind the title screen
+	Game.last_result = result
 	Game.title_pending = true
 	Game.say("YOU ESCAPED!", 4.0)
-	blood_text.scare("YOU ESCAPED", 3.5)
+	blood_text.scare("YOU ESCAPED" if not last else "YOU GOT OUT", 3.5)
 	fade.color = Color(1.0, 0.9, 0.6, 1.0)
 	fade.modulate.a = 0.0
 	var tween := create_tween()
@@ -470,7 +602,7 @@ func _build_grid() -> void:
 	for row in rows:
 		for col in cols:
 			var ch := MAP[row][col]
-			if ch == "#" or ch == "W" or ch == "X" or ch == "H" or ch == "t" or (ch >= "1" and ch <= "9"):
+			if ch in "#WXHtSZ^" or (ch >= "1" and ch <= "9"):
 				_grid.set_point_solid(Vector2i(col, row), true)
 
 
@@ -595,7 +727,9 @@ func _build_level() -> void:
 
 	# floor (a bit bigger than the map so there's an "outside" to escape to) + ceiling
 	var floor_size := Vector3((cols + 6) * TILE, 1.0, (rows + 8) * TILE)
-	_add_box(_world, Vector3(0, -0.52, 0), floor_size, OUTSIDE_COLOR, true)
+	if outdoors:
+		floor_size = Vector3((cols + 60) * TILE, 1.0, (rows + 60) * TILE)   # a dark field all round
+	_add_box(_world, Vector3(0, -0.52, 0), floor_size, theme.get("outside", OUTSIDE_COLOR), true)
 	# invisible fence round the edge of the world so nobody can fall off it
 	for side in [-1.0, 1.0]:
 		var x_wall := _add_box(_world, Vector3(side * (floor_size.x / 2.0 + 0.5), 2.5, 0), Vector3(1.0, 6.0, floor_size.z + 2.0), OUTSIDE_COLOR, true)
@@ -604,10 +738,14 @@ func _build_level() -> void:
 		z_wall.visible = false
 	# floor + ceiling are built one strip per map row (the mobile renderer only
 	# lights a mesh with its 8 nearest lights, and there are many small lights here)
+	var floor_color: Color = theme.get("floor", FLOOR_COLOR)
+	var ceiling_color: Color = theme.get("ceiling", CEILING_COLOR)
 	for row in rows:
 		var z := _tile_pos(row, 0).z
-		_add_box(_world, Vector3(0, -0.5, z), Vector3(cols * TILE, 1.0, TILE), FLOOR_COLOR, false)
-		_add_box(_world, Vector3(0, WALL_HEIGHT + 0.1, z), Vector3(cols * TILE, 0.2, TILE), CEILING_COLOR, false)
+		_add_box(_world, Vector3(0, -0.5, z), Vector3(cols * TILE, 1.0, TILE), floor_color, false)
+		if not outdoors:
+			_add_box(_world, Vector3(0, wall_height + 0.1, z), Vector3(cols * TILE, 0.2, TILE), ceiling_color, false)
+	var timed: Dictionary = chapter_def.get("timed", {})
 
 	var toy_index := 0
 	var monster_index := 0
@@ -621,14 +759,34 @@ func _build_level() -> void:
 			match ch:
 				"#":
 					var region := _region_of(row, col)
-					var color := WALL_COLORS[region % WALL_COLORS.size()]
-					_add_box(_world, pos + Vector3(0, WALL_HEIGHT / 2.0, 0), Vector3(TILE, WALL_HEIGHT, TILE), color, true)
-					_decorate_wall(row, col, pos, region)
+					var palette: Array = theme.get("walls", WALL_COLORS)
+					var color: Color = palette[region % palette.size()]
+					if outdoors:
+						_add_hedge(pos, color, row * 7 + col * 13)
+					else:
+						_add_box(_world, pos + Vector3(0, wall_height / 2.0, 0), Vector3(TILE, wall_height, TILE), color, true)
+						if theme.get("decor", true):
+							_decorate_wall(row, col, pos, region)
 				"W":
-					_add_box(_world, pos + Vector3(0, LOW_WALL_HEIGHT / 2.0, 0), Vector3(TILE, LOW_WALL_HEIGHT, TILE), LOW_WALL_COLOR, true)
+					_add_box(_world, pos + Vector3(0, LOW_WALL_HEIGHT / 2.0, 0), Vector3(TILE, LOW_WALL_HEIGHT, TILE), theme.get("low_wall", LOW_WALL_COLOR), true)
 				"=":
-					var fence := _add_box(_world, pos + Vector3(0, FENCE_HEIGHT / 2.0, 0), Vector3(TILE, FENCE_HEIGHT, TILE), FENCE_COLOR, true)
+					var fence := _add_box(_world, pos + Vector3(0, FENCE_HEIGHT / 2.0, 0), Vector3(TILE, FENCE_HEIGHT, TILE), theme.get("fence", FENCE_COLOR), true)
 					fence.collision_layer = 1 << (FENCE_LAYER - 1)
+				"S":
+					if outdoors:
+						_add_swings(row, col, pos)
+					else:
+						_add_shelf(row, col, pos)
+				"Z":
+					if outdoors:
+						_add_slide(row, col, pos)
+					else:
+						_add_crates(pos, row * 31 + col * 17)
+				"^":
+					if outdoors:
+						_add_tree(pos, row * 19 + col * 23)
+					else:
+						_add_box(_world, pos + Vector3(0, wall_height / 2.0, 0), Vector3(1.0, wall_height, 1.0), PILLAR_COLOR, true)
 				"P":
 					robot.position = pos + Vector3(0, 0.1, 0)
 					robot.set_spawn_here()
@@ -644,8 +802,15 @@ func _build_level() -> void:
 					var lamp := Node3D.new()
 					lamp.name = "Lamp%d" % (lamp_index + 1)
 					lamp.set_script(LampScript)
-					lamp.color = LAMP_COLORS[lamp_index % LAMP_COLORS.size()]
-					lamp.position = pos + Vector3(0, WALL_HEIGHT - 0.2, 0)
+					var lamp_colors: Array = theme.get("lamps", LAMP_COLORS)
+					lamp.color = lamp_colors[lamp_index % lamp_colors.size()]
+					if outdoors:
+						# a street lamp: a pole with the light up top, a wider but no brighter pool
+						lamp.position = pos + Vector3(0.6, 4.2, 0.6)
+						lamp.light_range = 8.0
+						_add_box(_world, pos + Vector3(0.6, 2.1, 0.6), Vector3(0.14, 4.2, 0.14), Color("2a2a2e"), true)
+					else:
+						lamp.position = pos + Vector3(0, wall_height - 0.2, 0)
 					_world.add_child(lamp)
 					lamp_index += 1
 				"X":
@@ -663,14 +828,18 @@ func _build_level() -> void:
 						monster.name = "Monster%d" % (monster_index + 1)
 						monster.set_script(MonsterScript)
 						monster.kind = MONSTER_LETTERS.find(ch)
+						monster.size = monster_scale
 						monster.position = pos + Vector3(0, 0.1, 0)
 						_world.add_child(monster)
 						monster_index += 1
 					elif ch >= "1" and ch <= "9":
 						var idx := int(ch) - 1
 						var door := _make_door(pos, DOOR_COLORS[idx % DOOR_COLORS.size()], _door_faces_x(row, col, rows, cols), Vector2i(col, row))
-						door.name = "Door%s" % ch
-						_doors[ch] = door
+						door.name = "Door%s" % ch if not _doors.has(ch) else "Door%s_%d" % [ch, _doors[ch].size()]
+						door.close_after = float(timed.get(ch, 0.0))
+						if not _doors.has(ch):
+							_doors[ch] = []
+						_doors[ch].append(door)
 					elif ch >= "a" and ch <= "i":
 						var idx := ch.unicode_at(0) - "a".unicode_at(0)
 						var button := Area3D.new()
@@ -679,25 +848,71 @@ func _build_level() -> void:
 						button.color = DOOR_COLORS[idx % DOOR_COLORS.size()]
 						button.position = pos
 						_world.add_child(button)
-						buttons[ch] = button
+						if not buttons.has(ch):
+							buttons[ch] = []
+						buttons[ch].append(button)
 
-	# wire buttons to their doors: a -> 1, b -> 2, c -> 3 ...
+	# wire buttons to their doors: a -> 1, b -> 2, c -> 3 ... (every a opens every door 1)
 	for key: String in buttons:
 		var door_key := str(key.unicode_at(0) - "a".unicode_at(0) + 1)
-		if _doors.has(door_key):
-			var door: StaticBody3D = _doors[door_key]
-			buttons[key].pressed.connect(func():
-				door.open()
-				Game.say("*clunk*   A door opened somewhere...", 2.5))
+		if not _doors.has(door_key):
+			continue
+		for button: Area3D in buttons[key]:
+			button.pressed.connect(_on_button_pressed.bind(door_key))
 
 
-## Which "room" a wall belongs to (for colours): rooms are split by the map's inner walls.
+## A button was stepped on: open its door(s). Timed doors start their countdown.
+func _on_button_pressed(door_key: String) -> void:
+	var opened_any := false
+	for door: StaticBody3D in _doors[door_key]:
+		if door.close_after > 0.0:
+			_door_timers[door] = door.close_after
+		if door.is_open:
+			continue
+		opened_any = true
+		door.open()
+	var first: StaticBody3D = _doors[door_key][0]
+	if first.close_after > 0.0:
+		Game.say("*clunk*   A door opened somewhere... it won't stay open long.  %d seconds." % int(first.close_after), 3.0)
+	elif opened_any:
+		Game.say("*clunk*   A door opened somewhere...", 2.5)
+
+
+## Timed doors count down and slam shut again - unless someone is standing in the doorway.
+func _tick_timed_doors(delta: float) -> void:
+	if _door_timers.is_empty() or _caught or _escaped:
+		return
+	for door: StaticBody3D in _door_timers.keys():
+		var left: float = _door_timers[door] - delta
+		if left > 0.0:
+			_door_timers[door] = left
+			if left <= 5.0 and int(left + delta) != int(left):
+				Game.say("the door...  %d" % (int(left) + 1), 0.9)
+			continue
+		var in_the_way := door.global_position.distance_to(robot.global_position) < TILE * 0.9
+		in_the_way = in_the_way or (drone.active and door.global_position.distance_to(drone.global_position) < TILE * 0.9)
+		for monster: CharacterBody3D in get_tree().get_nodes_in_group("monster"):
+			in_the_way = in_the_way or door.global_position.distance_to(monster.global_position) < TILE * 0.9
+		if in_the_way:
+			_door_timers[door] = 0.5   # hold it until you're through
+			continue
+		_door_timers.erase(door)
+		door.close()
+		Game.say("*SLAM*", 1.5)
+
+
+## How long (seconds) until this door slams shut; 0 if it isn't counting down.
+func door_time_left(door: StaticBody3D) -> float:
+	return _door_timers.get(door, 0.0)
+
+
+## Which room a wall belongs to (for colours): the room of the floor tile it looks into.
 func _region_of(row: int, col: int) -> int:
-	if row <= 5:
-		return 0
-	if col <= 7:
-		return 1 if row <= 11 else 2
-	return 3 if row <= 10 else 4
+	for step in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+		var room: int = _rooms.get(Vector2i(col, row) + step, -1)
+		if room >= 0:
+			return room
+	return 0
 
 
 ## Skirting board, a painted stripe, and now and then a peeling poster, a bloody
@@ -720,7 +935,9 @@ func _decorate_wall(row: int, col: int, pos: Vector3, region: int) -> void:
 		var hash_value := (row * 73 + col * 151 + (face.x + 1) * 7 + (face.y + 1) * 3) % 100
 
 		_add_box(_world, base + Vector3(0, 0.15, 0), _flat(along_x, TILE, 0.3), SKIRTING_COLOR, false)
-		var stripe_color := STRIPE_COLORS[region % STRIPE_COLORS.size()]
+		var stripes: Array = theme.get("stripes", STRIPE_COLORS)
+		var words: Array = theme.get("words", WALL_WORDS)
+		var stripe_color: Color = stripes[region % stripes.size()]
 		_add_box(_world, base + Vector3(0, 1.35, 0), _flat(along_x, TILE, 0.22), stripe_color.darkened(0.35), false)
 		if hash_value % 3 == 0:
 			_add_box(_world, base + Vector3(0, 1.1, 0), _flat(along_x, TILE, 0.06), stripe_color.darkened(0.55), false)
@@ -729,8 +946,8 @@ func _decorate_wall(row: int, col: int, pos: Vector3, region: int) -> void:
 			_add_poster(base + normal * 0.01, along_x, POSTER_COLORS[hash_value % POSTER_COLORS.size()], hash_value)
 		elif hash_value < 34:
 			_add_handprint(base + normal * 0.01, along_x, hash_value)
-		elif hash_value < 46:
-			_add_scrawl(base + normal * 0.015, normal, WALL_WORDS[hash_value % WALL_WORDS.size()], hash_value)
+		elif hash_value < 46 and not words.is_empty():
+			_add_scrawl(base + normal * 0.015, normal, words[hash_value % words.size()], hash_value)
 
 
 func _flat(along_x: bool, width: float, height: float) -> Vector3:
@@ -849,15 +1066,17 @@ func _add_table(pos: Vector3, seed_value: int) -> void:
 	var body := StaticBody3D.new()
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(1.4, 0.58, 1.0)
+	var size: Vector3 = theme.get("table_size", Vector3(1.4, 0.58, 1.0))
+	var wood: Color = theme.get("table", TABLE_COLOR)
+	box.size = size
 	shape.shape = box
-	shape.position = Vector3(0, 0.29, 0)
+	shape.position = Vector3(0, size.y / 2.0, 0)
 	body.add_child(shape)
 	holder.add_child(body)
-	_add_box(body, Vector3(0, 0.55, 0), Vector3(1.4, 0.06, 1.0), TABLE_COLOR, false)
-	for x in [-0.62, 0.62]:
-		for z in [-0.42, 0.42]:
-			_add_box(body, Vector3(x, 0.26, z), Vector3(0.06, 0.52, 0.06), TABLE_COLOR.darkened(0.3), false)
+	_add_box(body, Vector3(0, size.y - 0.03, 0), Vector3(size.x, 0.06, size.z), wood, false)
+	for x in [-size.x / 2.0 + 0.08, size.x / 2.0 - 0.08]:
+		for z in [-size.z / 2.0 + 0.08, size.z / 2.0 - 0.08]:
+			_add_box(body, Vector3(x, size.y / 2.0 - 0.03, z), Vector3(0.06, size.y - 0.06, 0.06), wood.darkened(0.3), false)
 	for i in 3:
 		var crayon := _add_box(body, Vector3(-0.3 + i * 0.25, 0.6, (i % 2) * 0.3 - 0.15), Vector3(0.04, 0.04, 0.3), BLOCK_COLORS[(seed_value + i) % BLOCK_COLORS.size()], false)
 		crayon.rotation.y = (seed_value + i * 3) * 0.3
@@ -885,6 +1104,12 @@ func _add_chair(parent: Node3D, pos: Vector3, yaw: float, color: Color, fallen: 
 ## spilt building blocks, drawings, a dark puddle, a knocked-over chair.
 func _add_clutter(row: int, col: int, pos: Vector3) -> void:
 	var hash_value := (row * 53 + col * 97 + (row * col) % 13) % 100
+	if outdoors:
+		if hash_value < 12:   # a tuft of long grass
+			for i in 3:
+				var blade := _add_box(_world, pos + Vector3((i - 1) * 0.25, 0.2, (i % 2) * 0.2), Vector3(0.05, 0.4, 0.05), TREE_COLORS[i % 2].lightened(0.15), false)
+				blade.rotation.z = ((hash_value + i) % 5 - 2) * 0.15
+		return
 	var spread := Vector3(((hash_value * 7) % 11 - 5) * 0.1, 0, ((hash_value * 13) % 11 - 5) * 0.1)
 	if hash_value < 9:
 		for i in 2 + hash_value % 2:
@@ -912,11 +1137,225 @@ func _make_door(pos: Vector3, color: Color, along_x: bool, cell: Vector2i) -> St
 	var door := StaticBody3D.new()
 	door.set_script(DoorScript)
 	door.color = color
-	door.size = Vector3(TILE, WALL_HEIGHT, 0.4) if along_x else Vector3(0.4, WALL_HEIGHT, TILE)
+	door.size = Vector3(TILE, wall_height, 0.4) if along_x else Vector3(0.4, wall_height, TILE)
 	door.position = pos
 	door.opened.connect(func(): _grid.set_point_solid(cell, false))   # monsters can follow you through
+	door.closed.connect(func(): _grid.set_point_solid(cell, true))
 	_world.add_child(door)
 	return door
+
+
+# ---------------------------------------------------------------------------
+# Chapter furniture: shelves, crates, pillars indoors - hedges, trees, swings, a slide outside
+# ---------------------------------------------------------------------------
+
+## A tall shelf unit filling the tile: lockers in the hallway, a bookcase in the library,
+## a cracked containment tank (glowing) in the lab.
+func _add_shelf(row: int, col: int, pos: Vector3) -> void:
+	var color: Color = theme.get("shelf", SHELF_COLOR)
+	var h := minf(wall_height - 0.3, 2.6)
+	if theme.has("glow"):
+		_add_tank(pos, theme["glow"], row * 11 + col * 5)
+		return
+	var body := _add_box(_world, pos + Vector3(0, h / 2.0, 0), Vector3(TILE - 0.1, h, TILE - 0.1), color, true)
+	var seed_value := row * 11 + col * 5
+	if chapter_def.get("theme", "") == "hallway":
+		# locker doors down each side, a couple hanging open
+		for side in [-1.0, 1.0]:
+			for i in 3:
+				var z := (i - 1) * 0.62
+				var door := _add_box(body, Vector3(side * (TILE / 2.0 - 0.03), h / 2.0, z), Vector3(0.03, h - 0.2, 0.56), color.lightened(0.1 if (seed_value + i) % 4 else 0.25), false)
+				_add_box(door, Vector3(side * 0.02, 0.2, 0.18), Vector3(0.02, 0.12, 0.04), Color("9a9a9a"), false)
+				if (seed_value + i) % 5 == 0:
+					door.rotation.y = side * 0.9
+					door.position.x += side * 0.25
+	else:
+		# rows of books, some fallen out
+		for side in [-1.0, 1.0]:
+			for shelf_i in 4:
+				var y := 0.35 + shelf_i * 0.6
+				_add_box(body, Vector3(side * (TILE / 2.0 - 0.15), y - 0.02, 0), Vector3(0.3, 0.04, TILE - 0.2), color.darkened(0.3), false)
+				var z := -0.75
+				var k := 0
+				while z < 0.75:
+					var w := 0.08 + ((seed_value + k + shelf_i) % 3) * 0.04
+					if (seed_value + k * 3 + shelf_i) % 7 != 0:
+						_add_box(body, Vector3(side * (TILE / 2.0 - 0.15), y + 0.2, z + w / 2.0), Vector3(0.22, 0.4 - ((k + shelf_i) % 3) * 0.05, w), BOOK_COLORS[(seed_value + k + shelf_i) % BOOK_COLORS.size()], false)
+					z += w + 0.01
+					k += 1
+
+
+## A cracked containment tank: green liquid, something's outline still floating inside, glass
+## smashed outwards. This is where THEY came from.
+func _add_tank(pos: Vector3, glow: Color, seed_value: int) -> void:
+	var holder := Node3D.new()
+	holder.name = "Tank%d" % (_world.find_children("Tank*", "Node3D", false, false).size() + 1)
+	holder.position = pos
+	holder.rotation.y = (seed_value % 4) * PI / 2.0
+	_world.add_child(holder)
+	var h := 3.2
+	var metal := Color("3a4444")
+	_add_box(holder, Vector3(0, 0.2, 0), Vector3(TILE - 0.2, 0.4, TILE - 0.2), metal, true)
+	_add_box(holder, Vector3(0, h - 0.15, 0), Vector3(TILE - 0.2, 0.3, TILE - 0.2), metal, false)
+	var broken := seed_value % 3 != 1
+	var liquid := _add_box(holder, Vector3(0, 0.4 + (0.6 if broken else h - 0.7) / 2.0, 0), Vector3(TILE - 0.5, 0.6 if broken else h - 0.7, TILE - 0.5), glow.darkened(0.3), true) as StaticBody3D
+	var liquid_mesh: MeshInstance3D = liquid.get_child(0)
+	var mat := liquid_mesh.material_override as StandardMaterial3D
+	mat.emission_enabled = true
+	mat.emission = glow
+	mat.emission_energy_multiplier = 0.8
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color.a = 0.75
+	var glass := _add_box(holder, Vector3(0, 0.4 + (h - 0.7) / 2.0, 0), Vector3(TILE - 0.3, h - 0.7, TILE - 0.3), Color(0.6, 0.9, 0.8, 0.12), false) as MeshInstance3D
+	var glass_mat := glass.material_override as StandardMaterial3D
+	glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass_mat.roughness = 0.1
+	if broken:
+		glass.scale.y = 0.35   # only the bottom of the glass is left
+		glass.position.y = 0.4 + (h - 0.7) * 0.35 / 2.0
+		for i in 5:   # shards on the floor outside
+			var shard := _add_box(holder, Vector3(0.9 + (i % 3) * 0.25, 0.01, (i - 2) * 0.3), Vector3(0.2 + (i % 2) * 0.15, 0.01, 0.12), Color(0.7, 0.95, 0.85), false)
+			shard.rotation.y = i * 1.1 + seed_value
+		var spill := _add_box(holder, Vector3(1.2, 0.004, 0.2), Vector3(1.2, 0.006, 1.4), glow.darkened(0.5), false) as MeshInstance3D
+		var spill_mat := spill.material_override as StandardMaterial3D
+		spill_mat.emission_enabled = true
+		spill_mat.emission = glow
+		spill_mat.emission_energy_multiplier = 0.5
+	else:
+		# something still in there
+		_add_box(holder, Vector3(0, 1.4, 0), Vector3(0.5, 1.6, 0.4), Color(0.05, 0.12, 0.08), false)
+		_add_box(holder, Vector3(0, 2.4, 0), Vector3(0.36, 0.4, 0.36), Color(0.05, 0.12, 0.08), false)
+		for x in [-0.09, 0.09]:
+			var eye := _add_box(holder, Vector3(x, 2.45, 0.19), Vector3(0.06, 0.06, 0.02), Color(1.0, 0.9, 0.7), false) as MeshInstance3D
+			var eye_mat := eye.material_override as StandardMaterial3D
+			eye_mat.emission_enabled = true
+			eye_mat.emission = Color(1.0, 0.8, 0.5)
+			eye_mat.emission_energy_multiplier = 2.0
+	var light := OmniLight3D.new()
+	light.light_color = glow
+	light.light_energy = 1.1
+	light.omni_range = 5.5
+	light.shadow_enabled = false
+	light.position = Vector3(0, 1.4, 0)
+	holder.add_child(light)
+	var label := Label3D.new()
+	label.text = "SUBJECT %d" % (seed_value % 9 + 1)
+	label.font_size = 40
+	label.pixel_size = 0.004
+	label.modulate = Color(0.8, 0.9, 0.85)
+	label.position = Vector3(0, 0.55, TILE / 2.0 - 0.08)
+	holder.add_child(label)
+
+
+## A pile of crates (gym mats in the gym, paint tins in the art room).
+func _add_crates(pos: Vector3, seed_value: int) -> void:
+	var color: Color = theme.get("crate", CRATE_COLOR)
+	var holder := Node3D.new()
+	holder.position = pos
+	holder.rotation.y = (seed_value % 5) * 0.1
+	_world.add_child(holder)
+	var body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(TILE - 0.2, 1.7, TILE - 0.2)
+	shape.shape = box
+	shape.position = Vector3(0, 0.85, 0)
+	body.add_child(shape)
+	holder.add_child(body)
+	_add_box(body, Vector3(-0.4, 0.4, -0.35), Vector3(0.9, 0.8, 0.9), color, false)
+	_add_box(body, Vector3(0.45, 0.4, 0.4), Vector3(0.85, 0.8, 0.85), color.darkened(0.15), false)
+	_add_box(body, Vector3(-0.35, 0.4, 0.5), Vector3(0.8, 0.8, 0.7), color.lightened(0.1), false)
+	var top := _add_box(body, Vector3(0.0, 1.2, 0.0), Vector3(0.85, 0.8, 0.85), color.darkened(0.3), false)
+	top.rotation.y = 0.3 + (seed_value % 3) * 0.2
+	if theme.has("glow"):
+		var tape := _add_box(body, Vector3(0, 0.9, 0), Vector3(TILE - 0.1, 0.08, TILE - 0.1), Color("d8c020"), false)
+		tape.rotation.y = 0.2
+
+
+## Playground hedge instead of a wall: dark, lumpy, a bit shorter than a wall - but you can't get over it.
+func _add_hedge(pos: Vector3, color: Color, seed_value: int) -> void:
+	var h := 2.6
+	var body := _add_box(_world, pos + Vector3(0, h / 2.0, 0), Vector3(TILE, h, TILE), color, true)
+	for i in 3:
+		var lump := _add_box(body, Vector3(((seed_value + i * 7) % 5 - 2) * 0.25, h / 2.0 - 0.3 + (i % 2) * 0.5, ((seed_value + i * 3) % 5 - 2) * 0.25), Vector3(1.4 + (i % 2) * 0.5, 1.0, 1.4 + ((i + 1) % 2) * 0.5), color.lightened(0.08 * i), false)
+		lump.rotation.y = (seed_value + i) * 0.4
+
+
+## A tree: trunk you can't walk through, a dark blob of leaves overhead.
+func _add_tree(pos: Vector3, seed_value: int) -> void:
+	var holder := Node3D.new()
+	holder.name = "Tree%d" % (_world.find_children("Tree*", "Node3D", false, false).size() + 1)
+	holder.position = pos
+	holder.rotation.y = (seed_value % 6) * 0.5
+	_world.add_child(holder)
+	var trunk := _add_box(holder, Vector3(0, 2.2, 0), Vector3(0.7, 4.4, 0.7), Color("2a1e16"), true)
+	trunk.rotation.y = 0.3
+	for i in 3:
+		var branch := _add_box(holder, Vector3(((i % 2) * 2 - 1) * 0.6, 3.0 + i * 0.6, (i - 1) * 0.5), Vector3(0.2, 1.6, 0.2), Color("2a1e16"), false)
+		branch.rotation.z = ((i % 2) * 2 - 1) * 0.7
+	for i in 4:
+		var leaves := _add_box(holder, Vector3(((seed_value + i * 5) % 5 - 2) * 0.5, 4.8 + (i % 2) * 0.9, ((seed_value + i * 3) % 5 - 2) * 0.5), Vector3(2.6 + (i % 2) * 0.8, 1.6, 2.6 + ((i + 1) % 2) * 0.8), TREE_COLORS[(seed_value + i) % 2], false)
+		leaves.rotation.y = (seed_value + i) * 0.5
+
+
+## A swing set: two rusty A-frames, chains and a seat - one swing hanging by a single chain.
+func _add_swings(row: int, col: int, pos: Vector3) -> void:
+	var holder := Node3D.new()
+	holder.name = "Swings%d" % (_world.find_children("Swings*", "Node3D", false, false).size() + 1)
+	holder.position = pos
+	holder.rotation.y = 0.0 if (row + col) % 2 == 0 else PI / 2.0
+	_world.add_child(holder)
+	var rust: Color = theme.get("shelf", SHELF_COLOR)
+	var body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(TILE - 0.2, 2.6, 1.2)
+	shape.shape = box
+	shape.position = Vector3(0, 1.3, 0)
+	body.add_child(shape)
+	holder.add_child(body)
+	for side in [-1.0, 1.0]:
+		for z in [-0.5, 0.5]:
+			var leg := _add_box(body, Vector3(side * 0.85, 1.3, z), Vector3(0.1, 2.7, 0.1), rust, false)
+			leg.rotation.x = -z * 0.35
+	_add_box(body, Vector3(0, 2.6, 0), Vector3(TILE, 0.1, 0.1), rust, false)
+	for i in 2:
+		var x := (i - 0.5) * 0.9
+		var hanging := i == (row + col) % 2
+		for c in (2 if hanging else 1):
+			var chain := _add_box(body, Vector3(x + (c - 0.5) * 0.4 if hanging else x, 1.6, 0), Vector3(0.03, 1.9, 0.03), Color("6a6a70"), false)
+			if not hanging:
+				chain.rotation.z = 0.25
+		var seat := _add_box(body, Vector3(x, 0.65, 0), Vector3(0.5, 0.05, 0.2), Color("2a2a2a"), false)
+		if not hanging:
+			seat.position = Vector3(x + 0.25, 0.6, 0)
+			seat.rotation.z = 0.9
+
+
+## A slide: steps up one side, a long slope down the other. Solid all the way round.
+func _add_slide(row: int, col: int, pos: Vector3) -> void:
+	var holder := Node3D.new()
+	holder.name = "Slide%d" % (_world.find_children("Slide*", "Node3D", false, false).size() + 1)
+	holder.position = pos
+	holder.rotation.y = 0.0 if row % 2 == 0 else PI / 2.0
+	_world.add_child(holder)
+	var paint: Color = theme.get("crate", CRATE_COLOR)
+	var body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(TILE - 0.2, 2.0, TILE - 0.2)
+	shape.shape = box
+	shape.position = Vector3(0, 1.0, 0)
+	body.add_child(shape)
+	holder.add_child(body)
+	_add_box(body, Vector3(-0.6, 0.9, 0), Vector3(0.7, 1.8, 0.8), paint.darkened(0.4), false)   # ladder tower
+	for i in 5:
+		_add_box(body, Vector3(-0.6, 0.3 + i * 0.35, 0.42), Vector3(0.5, 0.04, 0.04), Color("9a9a9a"), false)
+	var slope := _add_box(body, Vector3(0.35, 1.05, 0), Vector3(1.6, 0.08, 0.6), paint, false)
+	slope.rotation.z = -0.8
+	for side in [-1.0, 1.0]:
+		var rail := _add_box(body, Vector3(0.35, 1.15, side * 0.32), Vector3(1.6, 0.25, 0.04), paint.darkened(0.2), false)
+		rail.rotation.z = -0.8
 
 
 ## A door sits in a wall: figure out if that wall runs left-right (true) or up-down.

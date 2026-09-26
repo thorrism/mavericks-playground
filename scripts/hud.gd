@@ -15,6 +15,7 @@ extends CanvasLayer
 ## Time since the run started. The level starts/stops it.
 var elapsed := 0.0
 var ticking := false
+var subtitle := ""   # shown after the clock, e.g. "chapter 3  ·  library"
 
 var _fade: Tween
 
@@ -37,6 +38,8 @@ func _process(delta: float) -> void:
 	elapsed += delta
 	if time_label:
 		time_label.text = "%s  ·  %s" % [Settings.fmt_time(elapsed), Settings.NAMES[Settings.difficulty].to_lower()]
+		if subtitle != "":
+			time_label.text += "  ·  " + subtitle
 
 
 func start_clock() -> void:
