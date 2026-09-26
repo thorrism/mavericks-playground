@@ -5,6 +5,8 @@ extends Node
 ##   you:           footsteps that match your walking, a thump when you land
 ##   events:        a chime when you find a toy, a scream when something SEES you,
 ##                  a screech when something GETS you
+##   the building:  now and then something thuds, clacks or giggles somewhere off in the dark
+##   hiding:        your heartbeat, if one of them is close to the cupboard
 
 @export_group("Volumes (dB)")
 @export var hum_db := -18.0
@@ -13,6 +15,7 @@ extends Node
 @export var heartbeat_db := -4.0
 @export var footstep_db := -9.0
 @export var effects_db := 0.0
+@export var ambience_db := -6.0
 
 ## Broken music box tune in E minor. 0 = rest. Played an octave up, slightly out of time.
 const MELODY: Array[float] = [
@@ -29,11 +32,13 @@ var _panic: AudioStreamPlayer
 var _music: AudioStreamPlayer
 var _steps: AudioStreamPlayer
 var _fx: AudioStreamPlayer
+var _ambient: AudioStreamPlayer3D
 
 var _hunted := 0.0          # 0..1 eases in when a monster hunts you
 var _beat_timer := 0.0
 var _note_index := 0
 var _note_timer := 1.5
+var _ambient_timer := 12.0
 var _step_dist := 0.0
 var _step_variant := 0
 var _was_on_floor := true
@@ -46,6 +51,11 @@ func _ready() -> void:
 	_music = _poly_player(music_db)
 	_steps = _poly_player(footstep_db)
 	_fx = _poly_player(effects_db)
+	_ambient = AudioStreamPlayer3D.new()
+	_ambient.volume_db = ambience_db
+	_ambient.unit_size = 6.0
+	_ambient.max_distance = 60.0
+	add_child(_ambient)
 	Game.collected_one.connect(func(): _play(_fx, "chime"))
 	Game.spotted.connect(func(_by: Node3D): _play(_fx, "scream"))
 	Game.caught.connect(func(_by: Node3D): _play(_fx, "screech"))
@@ -61,12 +71,19 @@ func _process(delta: float) -> void:
 	_panic.volume_db = lerpf(-60.0, panic_db, sqrt(_hunted))
 	_music.volume_db = lerpf(music_db, -60.0, _hunted)
 
-	# heartbeat: faster the more scared you are
-	if _hunted > 0.01:
+	# heartbeat: faster the more scared you are; slow and loud while you hide with one of them near
+	var hiding_near := Game.hiding and _nearest_monster() < 9.0
+	if _hunted > 0.01 or hiding_near:
 		_beat_timer -= delta
 		if _beat_timer <= 0.0:
 			_beat_timer = 1.0 / lerpf(1.0, 2.8, _hunted)
-			_play(_fx, "heart", heartbeat_db + lerpf(-10.0, 0.0, _hunted))
+			_play(_fx, "heart", heartbeat_db + lerpf(-3.0 if hiding_near else -10.0, 0.0, _hunted))
+
+	# the building: something bumps, clacks or giggles in another room every so often
+	_ambient_timer -= delta
+	if _ambient_timer <= 0.0 and _hunted < 0.2 and not get_tree().paused:
+		_ambient_timer = randf_range(9.0, 22.0)
+		_far_noise()
 
 	# music box: one note at a time, never quite in time
 	_note_timer -= delta
@@ -78,6 +95,44 @@ func _process(delta: float) -> void:
 			_play(_music, "note", randf_range(-3.0, 0.0), f * 2.0 / NOTE_BASE * randf_range(0.995, 1.005))
 
 	_footsteps(delta)
+
+
+## How far the closest monster is from you (INF if there's nobody).
+func _nearest_monster() -> float:
+	var players := get_tree().get_nodes_in_group("player")
+	if players.is_empty():
+		return INF
+	var p: Node3D = players[0]
+	var nearest := INF
+	for m in get_tree().get_nodes_in_group("monster"):
+		nearest = minf(nearest, m.global_position.distance_to(p.global_position))
+	return nearest
+
+
+## A distant sound from a random direction, 8-16 m away: a thud, a door, a clack, rarely a giggle.
+func _far_noise() -> void:
+	var players := get_tree().get_nodes_in_group("player")
+	if players.is_empty():
+		return
+	var p: Node3D = players[0]
+	var angle := randf() * TAU
+	var dist := randf_range(8.0, 16.0)
+	_ambient.global_position = p.global_position + Vector3(cos(angle) * dist, 1.0, sin(angle) * dist)
+	var roll := randf()
+	var sound := "thud"
+	var pitch := randf_range(0.5, 0.7)
+	if roll < 0.3:
+		sound = "clack"
+		pitch = randf_range(0.7, 0.9)
+	elif roll < 0.5:
+		sound = "door"
+		pitch = randf_range(0.6, 0.8)
+	elif roll < 0.58:
+		sound = "giggle"
+		pitch = randf_range(0.85, 1.0)
+	_ambient.stream = Sfx.get_sound(sound)
+	_ambient.pitch_scale = pitch
+	_ambient.play()
 
 
 func _footsteps(delta: float) -> void:

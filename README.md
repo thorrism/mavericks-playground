@@ -11,13 +11,17 @@ reach buttons the robot can't, open the coloured doors, and escape through the g
 at the very top of the school.
 
 - Almost no light: your **flashlight**, a few dying ceiling lamps that flicker, and the glow of the toys.
-- Grimy **coloured walls** with stripes, torn posters, bloody handprints and words scrawled on them.
+- Grimy **coloured walls** with stripes, torn posters, bloody handprints and words scrawled on them;
+  little tables and chairs, spilt building blocks, drawings and dark puddles on the floor.
+- **Hide**: step into an open cupboard (`H` on the map) and they can't see or hear you - unless one
+  was right behind you when you climbed in. Your heartbeat tells you when one is close.
+- Now and then something thuds, clacks or giggles in another room. It's nothing. Probably.
 - Step on a **button** (or land the drone on it) and the door of the same colour opens.
 - **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
 - Two **monsters** (map letters `M` = Banbo, a tall teal grinning thing with a bow tie, and `J` = Jumbo,
   a huge green brute; `O` adds a lanky yellow bird if you want one) - one per room. They really walk
   (knees bend, feet plant, they lean into a run), know the way around walls, run to where they last
-  saw you and search there - but you are a bit faster, and **a monster never leaves its own room**:
+  saw you and search there, and stop to look around between wanders - but you are a bit faster, and **a monster never leaves its own room**:
   get through a doorway and it gives up. They also leave you alone for the first few seconds after a (re)start.
 - **Seen**: dripping blood letters (`BANBO SEES YOU`), a scream, red screen edges, shaking, your
   flashlight stutters, and the music turns into panic.
@@ -46,7 +50,7 @@ Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
 (`chase_speed`, `see_distance`, `hear_distance`, `lose_after`, `spawn_grace` - per kind in `_apply_kind`).
 
 The whole level is a **text map** at the top of `scripts/kinder.gd` - move a `T`, add an `M`,
-hang a lamp with `L`, draw a new room with `#`, and re-run. The original battery arena is still there too: `make arena`.
+hang a lamp with `L`, put a hiding cupboard against a wall with `H`, a table with `t`, draw a new room with `#`, and re-run. The original battery arena is still there too: `make arena`.
 
 ## Play it right now
 

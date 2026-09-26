@@ -9,27 +9,30 @@ extends Node3D
 ##   T  toy to collect                         X  exit door (opens when all toys are found)
 ##   M  the tall one (Banban-ish)   J  the giant (Jumbo Josh-ish)   O  the bird (Opila-ish, not used right now)
 ##   L  a flickering ceiling lamp
+##   H  a cupboard you can hide in (put it against a wall). Inside, THEY can't see you -
+##      unless one was already right behind you when you climbed in.
+##   t  a little kids' table with chairs (solid: hide behind it, THEY walk around it)
 ##   1 2 3  doors         a b c  buttons       button a opens door 1, b opens 2, c opens 3
 ##
 ## Every letter is one tile (TILE metres wide). Rows must all be the same length.
 
 const MAP: Array[String] = [
 	"##########X#########",
-	"#..................#",
-	"#.T..........L...T.#",
-	"#......J...........#",
+	"#H.................#",
+	"#.T....t.....L...T.#",
+	"#......J..........H#",
 	"#....T.............#",
 	"##########3#########",
 	"#......#...........#",
-	"#..T...#...........#",
+	"#..T..H#...........#",
 	"#..L...#.....===...#",
 	"#.M....#.....=a=...#",
-	"#......#.....===...#",
+	"#..t...#.....===...#",
 	"#WWWWW.#...........#",
-	"#.c..W.1...........#",
+	"#.c..W.1..........H#",
 	"#....W.#.....P.....#",
 	"#WWWWW.#.....L.....#",
-	"#......#..T........#",
+	"#......#..T...t....#",
 	"#..T...#...........#",
 	"####################",
 ]
@@ -57,6 +60,11 @@ const DOOR_COLORS: Array[Color] = [Color("c0392b"), Color("2e6fd6"), Color("d4a0
 const EXIT_COLOR := Color("ffd700")
 const TOY_COLORS: Array[Color] = [Color("ff5a5a"), Color("4f8dff"), Color("ffcc33"), Color("9b5de5"), Color("00c2a8"), Color("ff8c42")]
 const LAMP_COLORS: Array[Color] = [Color("9fffb0"), Color("ffb090"), Color("b0c8ff")]
+const CUPBOARD_COLOR := Color("5a4630")
+const TABLE_COLOR := Color("7a6a4a")
+const CHAIR_COLORS: Array[Color] = [Color("a04040"), Color("3a60a0"), Color("a09030"), Color("40803a")]
+const BLOCK_COLORS: Array[Color] = [Color("b03a3a"), Color("3a5ab0"), Color("c0a030"), Color("3a9a50"), Color("8a3aa0")]
+const PAPER_COLOR := Color("b0a890")
 
 const TOY_SCENE := preload("res://scenes/toy.tscn")
 const DoorScript := preload("res://scripts/door.gd")
@@ -108,6 +116,8 @@ var _scare_flash := 0.0
 var _time := 0.0
 var _toy_count := 0
 var _rooms: Dictionary = {}   # Vector2i cell -> room number
+var _cupboards: Dictionary = {}   # Vector2i cell -> Vector3 direction the open front faces
+var hiding := false   # true while you're tucked inside a cupboard
 
 
 func _ready() -> void:
@@ -204,6 +214,13 @@ func _process(delta: float) -> void:
 
 	if not _escaped and not _caught and robot.global_position.z < _exit_z - TILE * 0.5:
 		_on_escaped()
+
+	var hidden_now: bool = not drone.active and is_hidden(robot.global_position)
+	if hidden_now != hiding:
+		hiding = hidden_now
+		Game.hiding = hiding
+		if hiding and not _caught and not _escaped:
+			Game.say("You're hiding.  They can't see you in here... stay still.", 2.5)
 
 
 func _update_camera(delta: float) -> void:
@@ -382,17 +399,32 @@ func _build_grid() -> void:
 	for row in rows:
 		for col in cols:
 			var ch := MAP[row][col]
-			if ch == "#" or ch == "W" or ch == "X" or (ch >= "1" and ch <= "9"):
+			if ch == "#" or ch == "W" or ch == "X" or ch == "H" or ch == "t" or (ch >= "1" and ch <= "9"):
 				_grid.set_point_solid(Vector2i(col, row), true)
 
 
 ## Waypoints (world positions, tile centres) from one place to another. Empty if unreachable.
+## A target inside something solid (you, in a cupboard) becomes the nearest open tile beside it.
 func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 	var a := _cell_of(from)
 	var b := _cell_of(to)
 	var out := PackedVector3Array()
-	if _grid.is_point_solid(a) or _grid.is_point_solid(b):
+	if _grid.is_point_solid(a):
 		return out
+	if _grid.is_point_solid(b):
+		var best := b
+		var best_dist := INF
+		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = b + step
+			if not _grid.region.has_point(n) or _grid.is_point_solid(n):
+				continue
+			var d := Vector2(n - a).length()
+			if d < best_dist:
+				best_dist = d
+				best = n
+		if best == b:
+			return out
+		b = best
 	for cell in _grid.get_id_path(a, b):
 		out.append(_tile_pos(cell.y, cell.x))
 	return out
@@ -435,6 +467,19 @@ func _is_room_floor(ch: String) -> bool:
 ## Room number at a world position; -1 in a doorway, a wall, or outside.
 func room_at(pos: Vector3) -> int:
 	return _rooms.get(_cell_of(pos), -1)
+
+
+## Is this spot inside a cupboard (between its sides, behind its open front)?
+func is_hidden(pos: Vector3) -> bool:
+	var cell := _cell_of(pos)
+	if not _cupboards.has(cell):
+		return false
+	var open: Vector3 = _cupboards[cell]
+	var local := pos - _tile_pos(cell.y, cell.x)
+	local.y = 0.0
+	var depth := local.dot(open)          # +: towards the open front
+	var side := (local - open * depth).length()
+	return depth < 0.25 and side < 0.75
 
 
 func _cell_of(pos: Vector3) -> Vector2i:
@@ -511,6 +556,12 @@ func _build_level() -> void:
 				"X":
 					exit_door = _make_door(pos, EXIT_COLOR, _door_faces_x(row, col, rows, cols), Vector2i(col, row))
 					exit_door.name = "ExitDoor"
+				"H":
+					_add_cupboard(row, col, pos)
+				"t":
+					_add_table(pos, row * 31 + col * 17)
+				".":
+					_add_clutter(row, col, pos)
 				_:
 					if ch in MONSTER_LETTERS:
 						var monster := CharacterBody3D.new()
@@ -635,6 +686,127 @@ func _add_scrawl(pos: Vector3, normal: Vector3, words: String, seed_value: int) 
 	label.rotation.y = atan2(normal.x, normal.z)
 	label.rotation.z = ((seed_value % 5) - 2) * 0.06
 	_world.add_child(label)
+
+
+## A tall wooden cupboard with its doors hanging open, back to the wall. Step inside to hide.
+func _add_cupboard(row: int, col: int, pos: Vector3) -> void:
+	var rows := MAP.size()
+	var cols := MAP[0].length()
+	var dirs: Array[Vector2i] = [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]   # (drow, dcol)
+	var open := Vector2i.ZERO
+	for d in dirs:
+		var front := Vector2i(row + d.x, col + d.y)
+		var back := Vector2i(row - d.x, col - d.y)
+		if front.x < 0 or front.x >= rows or front.y < 0 or front.y >= cols:
+			continue
+		if not _is_room_floor(MAP[front.x][front.y]):
+			continue
+		if open == Vector2i.ZERO or (back.x >= 0 and back.x < rows and back.y >= 0 and back.y < cols and MAP[back.x][back.y] == "#"):
+			open = d
+	if open == Vector2i.ZERO:
+		open = Vector2i(1, 0)
+	var facing := Vector3(open.y, 0, open.x)
+	_cupboards[Vector2i(col, row)] = facing
+
+	var holder := Node3D.new()
+	holder.name = "Cupboard_%d_%d" % [row, col]
+	holder.position = pos
+	holder.rotation.y = atan2(facing.x, facing.z)   # local +Z = the open front
+	_world.add_child(holder)
+	var wood := CUPBOARD_COLOR
+	_add_box(holder, Vector3(0, 1.2, -0.95), Vector3(1.6, 2.4, 0.06), wood.lightened(0.12), true)
+	_add_box(holder, Vector3(-0.77, 1.2, -0.48), Vector3(0.06, 2.4, 1.0), wood, true)
+	_add_box(holder, Vector3(0.77, 1.2, -0.48), Vector3(0.06, 2.4, 1.0), wood, true)
+	_add_box(holder, Vector3(0, 2.37, -0.48), Vector3(1.6, 0.06, 1.0), wood.darkened(0.2), true)
+	_add_box(holder, Vector3(0, 2.05, -0.5), Vector3(1.5, 0.04, 0.9), wood.darkened(0.4), false)   # a shelf above your head
+	_add_box(holder, Vector3(0, 0.03, -0.48), Vector3(1.6, 0.06, 1.0), wood.darkened(0.5), false)
+	# two doors, hanging open
+	for side in [-1.0, 1.0]:
+		var hinge := Node3D.new()
+		hinge.position = Vector3(side * 0.8, 1.2, 0.02)
+		hinge.rotation.y = side * (2.2 if side > 0.0 else 1.1)
+		holder.add_child(hinge)
+		var panel := _add_box(hinge, Vector3(-side * 0.39, 0.0, 0.0), Vector3(0.78, 2.35, 0.04), wood.darkened(0.1), false)
+		_add_box(panel, Vector3(-side * 0.3, 0.0, 0.03), Vector3(0.05, 0.16, 0.03), Color("2a2420"), false)   # handle
+	# something scratched inside the back
+	var label := Label3D.new()
+	label.text = "hide"
+	label.font_size = 64
+	label.pixel_size = 0.004
+	label.modulate = BLOOD_COLOR.lightened(0.15)
+	label.outline_modulate = Color(0.1, 0.0, 0.0)
+	label.outline_size = 6
+	label.shaded = true
+	label.position = Vector3(0, 1.5, -0.91)
+	holder.add_child(label)
+
+
+## A little kids' table with two tiny chairs (one usually knocked over) and crayons.
+func _add_table(pos: Vector3, seed_value: int) -> void:
+	var holder := Node3D.new()
+	holder.position = pos
+	holder.rotation.y = (seed_value % 7) * 0.12
+	_world.add_child(holder)
+	var body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.4, 0.58, 1.0)
+	shape.shape = box
+	shape.position = Vector3(0, 0.29, 0)
+	body.add_child(shape)
+	holder.add_child(body)
+	_add_box(body, Vector3(0, 0.55, 0), Vector3(1.4, 0.06, 1.0), TABLE_COLOR, false)
+	for x in [-0.62, 0.62]:
+		for z in [-0.42, 0.42]:
+			_add_box(body, Vector3(x, 0.26, z), Vector3(0.06, 0.52, 0.06), TABLE_COLOR.darkened(0.3), false)
+	for i in 3:
+		var crayon := _add_box(body, Vector3(-0.3 + i * 0.25, 0.6, (i % 2) * 0.3 - 0.15), Vector3(0.04, 0.04, 0.3), BLOCK_COLORS[(seed_value + i) % BLOCK_COLORS.size()], false)
+		crayon.rotation.y = (seed_value + i * 3) * 0.3
+	_add_chair(holder, Vector3(0, 0, 0.85), PI, CHAIR_COLORS[seed_value % CHAIR_COLORS.size()], false)
+	_add_chair(holder, Vector3(0.2, 0, -0.9), 0.4, CHAIR_COLORS[(seed_value + 1) % CHAIR_COLORS.size()], seed_value % 3 != 0)
+
+
+## A tiny chair. Tipped over on its side if `fallen`.
+func _add_chair(parent: Node3D, pos: Vector3, yaw: float, color: Color, fallen: bool) -> void:
+	var chair := Node3D.new()
+	chair.position = pos
+	chair.rotation.y = yaw
+	if fallen:
+		chair.rotation.z = PI / 2.0
+		chair.position.y = 0.18
+	parent.add_child(chair)
+	_add_box(chair, Vector3(0, 0.3, 0), Vector3(0.36, 0.04, 0.36), color, false)
+	_add_box(chair, Vector3(0, 0.5, -0.16), Vector3(0.36, 0.4, 0.04), color.darkened(0.15), false)
+	for x in [-0.15, 0.15]:
+		for z in [-0.15, 0.15]:
+			_add_box(chair, Vector3(x, 0.15, z), Vector3(0.04, 0.3, 0.04), color.darkened(0.4), false)
+
+
+## Odds and ends on the floor, decided by the tile's position so the level always looks the same:
+## spilt building blocks, drawings, a dark puddle, a knocked-over chair.
+func _add_clutter(row: int, col: int, pos: Vector3) -> void:
+	var hash_value := (row * 53 + col * 97 + (row * col) % 13) % 100
+	var spread := Vector3(((hash_value * 7) % 11 - 5) * 0.1, 0, ((hash_value * 13) % 11 - 5) * 0.1)
+	if hash_value < 9:
+		for i in 2 + hash_value % 2:
+			var block := _add_box(_world, pos + spread + Vector3((i - 1) * 0.3, 0.12, (i % 2) * 0.25), Vector3(0.24, 0.24, 0.24), BLOCK_COLORS[(hash_value + i) % BLOCK_COLORS.size()], false)
+			block.rotation.y = (hash_value + i * 5) * 0.4
+	elif hash_value < 15:
+		for i in 2:
+			var paper := _add_box(_world, pos + spread + Vector3(i * 0.35, 0.005 + i * 0.003, i * 0.2), Vector3(0.3, 0.004, 0.42), PAPER_COLOR.darkened(0.2 + i * 0.1), false)
+			paper.rotation.y = (hash_value + i * 4) * 0.5
+			_add_box(paper, Vector3(0, 0.003, 0), Vector3(0.14, 0.002, 0.14), POSTER_COLORS[(hash_value + i) % POSTER_COLORS.size()].darkened(0.5), false)
+	elif hash_value < 19:
+		var puddle := _add_box(_world, pos + spread + Vector3(0, 0.004, 0), Vector3(0.9 + (hash_value % 3) * 0.2, 0.006, 0.7), BLOOD_COLOR.darkened(0.3), false) as MeshInstance3D
+		puddle.rotation.y = hash_value * 0.3
+		var mat := puddle.material_override as StandardMaterial3D
+		mat.roughness = 0.2
+		mat.metallic = 0.2
+		for i in 2:
+			var drip := _add_box(puddle, Vector3(0.5 + i * 0.2, 0.0, (i - 0.5) * 0.4), Vector3(0.25, 0.006, 0.2), BLOOD_COLOR.darkened(0.3), false) as MeshInstance3D
+			drip.material_override = mat
+	elif hash_value < 22:
+		_add_chair(_world, pos + spread, hash_value * 0.7, CHAIR_COLORS[hash_value % CHAIR_COLORS.size()], true)
 
 
 func _make_door(pos: Vector3, color: Color, along_x: bool, cell: Vector2i) -> StaticBody3D:

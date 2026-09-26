@@ -271,6 +271,46 @@ func _test_kinder() -> void:
 	monster._cooldown = 100.0
 	monster.set_physics_process(false)
 
+	# cupboards: climb in and a monster in your room can't see or hear you - unless it watched you do it
+	_check(level._cupboards.size() == _count_in_map("H") and level._cupboards.size() >= 3, "%d hiding cupboards placed from the map" % level._cupboards.size())
+	var hide_cell := Vector2i(-1, -1)
+	for cell in level._cupboards.keys():
+		if level.room_at(level._tile_pos(cell.y, cell.x)) == start_room:
+			hide_cell = cell
+	_check(hide_cell.x >= 0, "there is a cupboard in the start room")
+	var facing: Vector3 = level._cupboards[hide_cell]
+	var hide_pos: Vector3 = level._tile_pos(hide_cell.y, hide_cell.x) - facing * 0.4 + Vector3(0, 0.1, 0)
+	_check(level.is_hidden(hide_pos) and not level.is_hidden(start) and not level.is_hidden(hide_pos + facing * 1.5),
+		"inside the cupboard counts as hidden, the tile in front of it doesn't")
+	_check(level.find_path(start, hide_pos).size() > 0, "monsters can still path up to a cupboard (they stop beside it)")
+	monster._room = start_room
+	monster._home = hide_pos + facing * 3.5
+	monster.global_position = monster._home
+	monster._visual.rotation.y = atan2(-facing.x, -facing.z)   # staring straight at the open cupboard
+	monster._target = monster.global_position
+	monster._idle_for = 60.0   # ...and standing still, having a look around
+	monster._cooldown = 100.0
+	var seen_before: int = spotted[0]
+	robot.global_position = hide_pos
+	monster.set_physics_process(true)
+	await _settle(15)
+	_check(level.hiding and not monster.chasing and spotted[0] == seen_before, "hidden in a cupboard 3.5 m in front of it: it doesn't see you")
+	monster._visual.rotation.y = atan2(-facing.x, -facing.z)
+	robot.global_position = hide_pos + facing * 1.5
+	await _settle(10)
+	_check(monster.chasing and spotted[0] > seen_before, "step out of it: seen")
+	robot.global_position = hide_pos
+	await _settle(2)
+	_check(monster._busted and monster._can_see(robot), "...and diving back in while it's right there doesn't save you")
+	robot.global_position = start
+	monster.chasing = false
+	monster._hunt_timer = 0.0
+	monster._search_timer = 0.0
+	monster._visual.rotation.y = PI
+	await _settle(2)
+	monster.set_physics_process(false)
+	_check(not level.hiding and not monster._busted, "out of the cupboard: not hiding any more")
+
 	# a monster from YOUR room seeing you: bloody letters + red edges + a scream, and it comes for you
 	monster._room = start_room
 	monster._home = start + Vector3(0, 0.1, 6.0)
