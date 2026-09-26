@@ -14,8 +14,8 @@ The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
 ```
 ##########X#########      #  wall        T  toy        X  golden exit door
 #..................#      W  low wall (drone only)     =  fence (jump over)
-#.T..J.O....L..M.T.#      L  flickering lamp            1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
-#..................#      M  tall teal one   J  big green one   O  yellow bird
+#.T..J......L..M.T.#      L  flickering lamp            1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
+#..................#      M  Banbo (tall teal)   J  Jumbo (big green)   O  Opi the bird (not on the map right now)
 ```
 
 So "add a bird in the top room" is literally typing one `O`. It's dark and first person:
@@ -28,6 +28,8 @@ and how hard the monsters are is at the top of `scripts/monster.gd`. Best first 
 - "Add another bird next to the start." (add an `O`; `M` and `J` for the other two)
 - "Make the tall one pink." / "Make the bird's legs purple." (`color` per kind in `_apply_kind`, monster.gd)
 - "Make the monsters slower / faster / easier." (`chase_speed`, `see_distance`, `lose_after` in monster.gd)
+- "Give me more time to dodge" / "make Jumbo's swing reach further." (`windup_time`, `strike_range`, `strike_arc` in monster.gd's Attack group)
+- "Make the button sound louder" / "make the door creak longer." (`click` and `door` in sfx.gd)
 - "Make them hear me from further away." (`hear_distance`)
 - "Let the bird follow me anywhere / through doors." (set that monster's `_room = -1` in monster.gd)
 - "Change the bloody words when I get seen." (`scare_words` in kinder.gd)
