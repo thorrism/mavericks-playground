@@ -1,6 +1,7 @@
 class_name TouchControls
 extends CanvasLayer
-## On-screen joystick + jump button for iPhone/iPad.
+## On-screen joystick + jump/drone buttons for iPhone/iPad. Dragging a finger
+## anywhere else on the screen looks around (first-person levels).
 ## Hidden automatically on Mac (keyboard), shown on touch screens.
 ## The robot reads input through the static helpers at the bottom.
 
@@ -15,6 +16,8 @@ var _joy_vector := Vector2.ZERO
 var _jump_queued := false
 var _jump_held := false
 var _drone_queued := false
+var _look_touch_index := -1
+var _look_delta := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -36,12 +39,25 @@ func _input(event: InputEvent) -> void:
 		if event.pressed and _joy_touch_index == -1 and _joy_base.get_global_rect().grow(60).has_point(event.position):
 			_joy_touch_index = event.index
 			_update_joystick(event.position)
+		elif event.pressed and _look_touch_index == -1 and not _over_button(event.position):
+			_look_touch_index = event.index
 		elif not event.pressed and event.index == _joy_touch_index:
 			_joy_touch_index = -1
 			_joy_vector = Vector2.ZERO
 			_joy_knob.position = (_joy_base.size - _joy_knob.size) / 2.0
+		elif not event.pressed and event.index == _look_touch_index:
+			_look_touch_index = -1
 	elif event is InputEventScreenDrag and event.index == _joy_touch_index:
 		_update_joystick(event.position)
+	elif event is InputEventScreenDrag and event.index == _look_touch_index:
+		_look_delta += event.relative
+
+
+func _over_button(pos: Vector2) -> bool:
+	for child in get_children():
+		if child is Button and child.get_global_rect().has_point(pos):
+			return true
+	return false
 
 
 func _update_joystick(touch_pos: Vector2) -> void:
@@ -55,6 +71,20 @@ func _update_joystick(touch_pos: Vector2) -> void:
 
 static func direction() -> Vector2:
 	return _instance._joy_vector if _instance else Vector2.ZERO
+
+
+## True when the touch UI is showing (real phone, or `make touch` on the Mac).
+static func is_touch() -> bool:
+	return _instance != null and _instance.visible
+
+
+## How far a finger dragged on the screen since last frame (for looking around).
+static func look_delta() -> Vector2:
+	if _instance == null:
+		return Vector2.ZERO
+	var d := _instance._look_delta
+	_instance._look_delta = Vector2.ZERO
+	return d
 
 
 ## Returns true once per tap of the jump button.

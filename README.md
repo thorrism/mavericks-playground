@@ -5,24 +5,31 @@ It exists so a kid + a grown-up + Devin can say "make the robot green and add la
 
 ## Kinder Escape (the current game)
 
-You're a little robot locked in a colourful, slightly spooky kindergarten. Big silly monsters
-waddle around the rooms. Find all the toys, use your drone to reach buttons the robot can't,
-open the coloured doors, and escape through the golden exit.
+First person. You wake up in a dark, abandoned kindergarten with only a flashlight. Tall
+things with glowing eyes wander the rooms - if one sees you it hunts you. Find all six toys,
+use your drone to reach buttons the robot can't, open the coloured doors, and escape
+through the golden exit.
 
+- Almost no light: your **flashlight**, a few dying ceiling lamps that flicker, and the glow of the toys.
 - Step on a **button** (or land the drone on it) and the door of the same colour opens.
-- **Low blue walls**: only the drone can fly over them. **Yellow fences**: the robot can jump over.
-- A **monster** that touches you sends you back to the start (you keep your toys).
+- **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
+- A **monster** that grabs you: the screen flashes red, goes black, and you wake up at the start (you keep your toys).
 - Collect every toy and the **golden door** opens.
+- Sound is generated from code: a low hum, a heartbeat that speeds up when you're being hunted, a screech when caught.
 
 | Action | Mac keyboard | iPhone |
 |---|---|---|
-| Move | WASD or arrow keys | left joystick |
+| Look around | mouse (Esc releases it, click the window to grab it again) | drag anywhere on screen |
+| Move | WASD or arrow keys (relative to where you look) | left joystick |
 | Jump / drone up | Space (hold to fly the drone up) | JUMP button |
 | Switch robot <-> drone | E | DRONE button |
 | Restart | R | - |
 
+Too dark / too scary / not scary enough? The knobs are at the top of `scripts/kinder.gd`
+(`flashlight_*`, `fog_density`, the colours) and `scripts/monster.gd` (speed, eyes, how far it sees).
+
 The whole level is a **text map** at the top of `scripts/kinder.gd` - move a `T`, add an `M`,
-draw a new room with `#`, and re-run. The original battery arena is still there too: `make arena`.
+hang a lamp with `L`, draw a new room with `#`, and re-run. The original battery arena is still there too: `make arena`.
 
 ## Play it right now
 
@@ -44,9 +51,11 @@ Export templates go in `~/Library/Application Support/Godot/export_templates/4.7
 ## Where things live
 
 ```
-scenes/kinder.tscn      Kinder Escape: sky, sun, camera, robot, HUD, touch controls
-scripts/kinder.gd       THE MAP (text) + colours + builds walls/doors/buttons/toys/monsters
-scripts/monster.gd      the wandering/chasing monster (look + behaviour settings at the top)
+scenes/kinder.tscn      Kinder Escape: dark environment/fog, first-person camera + flashlight, HUD, fade, touch controls
+scripts/kinder.gd       THE MAP (text) + colours + scary knobs + builds walls/doors/buttons/toys/monsters/lamps
+scripts/monster.gd      the lurking/hunting monster (look + behaviour settings at the top)
+scripts/lamp.gd         a flickering ceiling lamp (`L` on the map)
+scripts/spooky_audio.gd hum / heartbeat / screech, all generated from maths
 scripts/drone.gd        the flying drone (speed, how high it can go)
 scripts/door.gd         a sliding door
 scripts/button_pad.gd   a floor button

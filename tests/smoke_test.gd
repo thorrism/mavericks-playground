@@ -115,6 +115,30 @@ func _test_kinder() -> void:
 	_check(robot.is_on_floor(), "robot standing on the kinder floor (y=%.2f)" % robot.global_position.y)
 	var start: Vector3 = robot.global_position
 
+	# first person: camera sits at eye height on the robot, with a flashlight, in the dark
+	var camera: Camera3D = level.get_node("Camera3D")
+	var flashlight: SpotLight3D = level.get_node("Camera3D/Flashlight")
+	var cam_offset: Vector3 = camera.global_position - robot.global_position
+	_check(abs(cam_offset.y - level.eye_height) < 0.2 and Vector2(cam_offset.x, cam_offset.z).length() < 0.1,
+		"camera is first person at eye height (%.2f)" % cam_offset.y)
+	_check(not robot.get_node("Visual").visible, "your own body is hidden in first person")
+	_check(flashlight.visible and flashlight.light_energy > 1.0 and flashlight.spot_range > 5.0, "flashlight is on")
+	var environment: Environment = level.get_node("WorldEnvironment").environment
+	_check(environment.fog_enabled and environment.ambient_light_energy < 0.3, "level is dark and foggy")
+	_check(get_nodes_in_group("lamp").size() == _count_in_map("L"), "%d flickering lamps placed from the map" % get_nodes_in_group("lamp").size())
+
+	# looking around turns you: W walks where the camera looks
+	level._look(Vector2(PI / 2.0, 0.0))   # mouse moved right = turn 90 degrees to the right
+	await physics_frame
+	_check(abs(camera.rotation.y + PI / 2.0) < 0.01, "mouse turns the camera (yaw=%.2f)" % camera.rotation.y)
+	var before_turn: Vector3 = robot.global_position
+	Input.action_press("move_forward")
+	await _settle(20)
+	Input.action_release("move_forward")
+	var moved: Vector3 = robot.global_position - before_turn
+	_check(moved.x > 0.5 and abs(moved.z) < 0.3, "W walks the way you are facing (dx=%.1f dz=%.1f)" % [moved.x, moved.z])
+	level._look(Vector2(-PI / 2.0, 0.0))   # face forward again
+
 	# walls block: push into the wall right of the start room for a while, must stay inside
 	Input.action_press("move_right")
 	await _settle(120)
@@ -137,6 +161,7 @@ func _test_kinder() -> void:
 	Input.action_release("drone")
 	await process_frame
 	_check(drone.active and drone.visible and not robot.active, "E hands control to the drone")
+	_check(robot.get_node("Visual").visible, "you can see your body while flying the drone")
 	var drone_y: float = drone.global_position.y
 	Input.action_press("jump")
 	await _settle(20)
@@ -154,12 +179,17 @@ func _test_kinder() -> void:
 	await process_frame
 	_check(not drone.active and robot.active, "E again goes back to the robot")
 
-	# a monster catching the robot sends it back to the start
+	# a monster catching the robot: jump-scare (frozen, screen goes dark), then wake up at the start
 	robot.global_position = start + Vector3(6, 0.1, 0)
 	var monster: CharacterBody3D = monsters[0]
 	monster.global_position = robot.global_position + Vector3(0.5, 0, 0)
 	await _settle(5)
-	_check(robot.global_position.distance_to(start) < 1.0, "monster tag sends the robot home")
+	var fade: ColorRect = level.get_node("HUD/Fade")
+	_check(level._caught and not robot.active and fade.modulate.a > 0.1, "monster grabs you: frozen + screen flashes")
+	await create_timer(3.5).timeout
+	await _settle(5)
+	_check(robot.global_position.distance_to(start) < 1.0, "...then you wake up back at the start")
+	_check(not level._caught and robot.active and fade.modulate.a < 0.05, "...and can move again")
 
 	# collect every toy -> exit opens; walk out -> escaped
 	var exit_door: StaticBody3D = world.get_node("ExitDoor")
