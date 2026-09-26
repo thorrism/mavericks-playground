@@ -299,13 +299,25 @@ func _test_kinder() -> void:
 	_check(monster.attack == monster.Attack.WINDUP and not level._caught, "in reach: it winds up (arms go high) instead of grabbing you on touch")
 	await _settle(8)
 	_check(monster._left_arm.rotation.x < -1.5 and not level._caught, "arms are up over its head during the wind-up (%.2f)" % monster._left_arm.rotation.x)
-	# dodge: get well out of the way before the arms come down
-	robot.global_position += Vector3(4.0, 0, 0)
+	# while winding up it keeps turning to face you...
+	robot.global_position += Vector3(1.5, 0, 0)
 	var frames := 0
+	while monster._attack_timer > monster.commit_before and monster.attack == monster.Attack.WINDUP and frames < 60:
+		await physics_frame
+		frames += 1
+	var to_robot := (robot.global_position - monster.global_position)
+	to_robot.y = 0.0
+	_check(monster.attack == monster.Attack.WINDUP and monster._facing().dot(to_robot.normalized()) > 0.9, "it turns to face you during the wind-up (dot=%.2f)" % monster._facing().dot(to_robot.normalized()))
+	# ...until it commits: from here the lane is fixed - so a real sidestep now still gets you out
+	var lane: Vector3 = monster._facing()
+	var side := Vector3(lane.z, 0, -lane.x)
+	robot.global_position += side * 4.0
+	frames = 0
 	while monster.attack != monster.Attack.RECOVER and frames < 120:
 		await physics_frame
 		frames += 1
-	_check(monster.attack == monster.Attack.RECOVER and not level._caught, "it swings and MISSES when you've moved away")
+	_check(monster._strike_dir.dot(lane) > 0.99, "it did NOT turn after committing (swung where you were)")
+	_check(monster.attack == monster.Attack.RECOVER and not level._caught, "it swings and MISSES when you've moved out of the lane")
 	_check(missed[0] == 1 and blood._text.contains("MISSED") and blood._text.contains("BANBO"), "'BANBO MISSED YOU' in blood (%s)" % blood._text)
 	frames = 0
 	while monster.attack != monster.Attack.NONE and frames < 200:
@@ -335,12 +347,18 @@ func _test_kinder() -> void:
 		frames += 1
 	monster._room = -1
 
-	# stand still in front of it: the swing lands, jump-scare (frozen, screen goes dark), then the LEVEL RESTARTS
+	# a half-hearted shuffle (less than swing_width to the side) is not a dodge: the swing lands,
+	# jump-scare (frozen, screen goes dark), then the LEVEL RESTARTS
 	monster._cooldown = 0.0
 	monster.chasing = true
 	monster._hunt_timer = 10.0
 	monster.global_position = robot.global_position + Vector3(0, 0, 1.6)
 	monster._visual.rotation.y = PI
+	frames = 0
+	while monster.attack != monster.Attack.STRIKE and frames < 60:
+		await physics_frame
+		frames += 1
+	robot.global_position += Vector3(monster.swing_width * 0.5, 0, 0)
 	frames = 0
 	while not level._caught and frames < 120:
 		await physics_frame

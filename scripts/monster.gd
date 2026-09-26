@@ -7,8 +7,10 @@ extends CharacterBody3D
 ## walking close by, it hunts you: it knows the way around walls, goes to where it last saw
 ## you, searches around there, and only gives up after a while. But each one is tied to the
 ## room it was born in - it can't follow you through a doorway, so a door is always an escape.
-## Touching one doesn't hurt. When it gets close it WINDS UP (arms go high, it roars), then
-## SLAMS down in front of it - step out of the way and it misses, and it's stuck for a moment.
+## Touching one doesn't hurt. When it gets close it WINDS UP (arms go high, it roars), turning
+## to face you - then it COMMITS: the last moment of the wind-up it stops turning and SLAMS down
+## along a straight lane in front of it. Get out of that lane before the arms land and it misses
+## (and is stuck for a moment); stand there, or step in late, and it lands.
 
 enum Kind { TALL_ONE, GIANT, BIRD }
 enum Attack { NONE, WINDUP, STRIKE, RECOVER }
@@ -31,12 +33,13 @@ enum Attack { NONE, WINDUP, STRIKE, RECOVER }
 
 @export_group("Attack")
 @export var strike_range := 2.8        # it starts its swing when you're this close, in front of it
-@export var strike_arc := 70.0         # degrees: how wide the swing is - sidestep out of this to dodge
 @export var windup_time := 0.5         # seconds of arms-up warning before the swing (your time to move)
 @export var strike_time := 0.18        # how long the swing itself takes
 @export var recover_time := 0.8        # seconds it is stuck after a swing
 @export var lunge := 1.5               # metres it throws itself forward during the swing (backing off alone won't save you)
-@export var track_rate := 1.8          # radians/s it can turn while winding up (a lazy sidestep gets tracked)
+@export var track_rate := 4.0          # radians/s it turns to face you while winding up - until it commits
+@export var commit_before := 0.12      # seconds before the swing when it stops tracking you (+ strike_time = your real dodge window)
+@export var swing_width := 1.1         # metres either side of the lane the arms cover - get further than this to dodge
 
 ## Nothing may poke through the ceiling (walls are 3 m).
 const MAX_TOP := 2.8
@@ -70,6 +73,7 @@ var _lean := 0.0
 var attack := Attack.NONE
 var _attack_timer := 0.0
 var _strike_dir := Vector3.FORWARD
+var _strike_from := Vector3.ZERO   # where it stood when the swing started (the lane begins here)
 
 var _visual: Node3D
 var _head: Node3D
@@ -149,12 +153,13 @@ func _apply_kind() -> void:
 			lose_after = 2.5
 			search_time = 5.0
 			strike_range = 3.6
-			strike_arc = 90.0
 			windup_time = 0.7
 			strike_time = 0.22
 			recover_time = 1.2
 			lunge = 2.2
-			track_rate = 1.4
+			track_rate = 3.0
+			commit_before = 0.15
+			swing_width = 1.5
 			_step_len = 1.3
 			_swing_amp = 0.5
 			_knee_amp = 0.7
@@ -176,12 +181,13 @@ func _apply_kind() -> void:
 			lose_after = 1.5
 			search_time = 3.0
 			strike_range = 2.4
-			strike_arc = 55.0
 			windup_time = 0.4
 			strike_time = 0.14
 			recover_time = 0.7
 			lunge = 1.2
-			track_rate = 2.2
+			track_rate = 5.0
+			commit_before = 0.1
+			swing_width = 0.9
 			_step_len = 1.3
 			_swing_amp = 0.5
 			_knee_amp = 0.0
@@ -321,8 +327,8 @@ func _attack_step(delta: float, player: Node3D) -> void:
 	_attack_timer -= delta
 	match attack:
 		Attack.WINDUP:
-			# it keeps turning towards you - but slowly, so a quick sidestep gets you out of the arc
-			if player:
+			# it turns to face you right up to the commit point - after that the lane is fixed
+			if player and _attack_timer > commit_before:
 				var to_player := player.global_position - global_position
 				to_player.y = 0.0
 				if to_player.length() > 0.1:
@@ -335,6 +341,7 @@ func _attack_step(delta: float, player: Node3D) -> void:
 				attack = Attack.STRIKE
 				_attack_timer = strike_time
 				_strike_dir = _facing()
+				_strike_from = global_position
 				_play("whoosh", 2.0, randf_range(0.9, 1.1))
 				# throw itself forward - unless that would take it out of its room
 				var ahead := global_position + _strike_dir * (lunge + 0.5)
@@ -370,16 +377,18 @@ func _land_strike(player: Node3D) -> void:
 		Game.player_missed(self)   # no jolt if you're already out the door or off in the drone
 
 
-## Is this spot under the swing: in front of it, in reach, inside the arc?
+## Is this spot under the swing? The arms sweep a straight lane: from where it stood when the
+## swing began, `lunge + strike_range` metres along `_strike_dir`, `swing_width` to either side.
 func _in_strike_zone(pos: Vector3) -> bool:
-	var to_pos := pos - global_position
+	var to_pos := pos - _strike_from
 	to_pos.y = 0.0
-	var dist := to_pos.length()
-	if dist > strike_range:
-		return false
-	if dist < 0.8:
+	if to_pos.length() < 0.8:
 		return true   # right under it: no dodging that
-	return _strike_dir.dot(to_pos / dist) >= cos(deg_to_rad(strike_arc / 2.0))
+	var along := to_pos.dot(_strike_dir)
+	if along < 0.0 or along > lunge + strike_range:
+		return false
+	var side := (to_pos - _strike_dir * along).length()
+	return side <= swing_width
 
 
 ## Which way its body is pointing (flat).
