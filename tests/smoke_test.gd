@@ -228,7 +228,14 @@ func _test_kinder() -> void:
 	_check(level.find_path(giant.global_position, start).is_empty(), "...but not while it's shut")
 	level._grid.set_point_solid(level._cell_of(world.get_node("Door3").global_position), false)
 
-	# a monster SEEING you: bloody letters + red edges + a scream, and it comes for you
+	# ...but every monster is tied to its own room: it can't see, hear or grab you from another one
+	var start_room: int = level.room_at(start)
+	var tall_room: int = level.room_at(monster.global_position)
+	var giant_room: int = level.room_at(giant.global_position)
+	_check(start_room >= 0 and tall_room >= 0 and giant_room >= 0 and start_room != tall_room and tall_room != giant_room and start_room != giant_room,
+		"start, left and top rooms are different rooms (%d/%d/%d)" % [start_room, tall_room, giant_room])
+	_check(level.room_at(world.get_node("Door1").global_position) == -1, "a doorway belongs to no room")
+	_check(monster._room == tall_room and giant._room == giant_room, "monsters know which room they live in")
 	var spotted := [0]
 	game.spotted.connect(func(_by): spotted[0] += 1)
 	robot.global_position = start
@@ -236,6 +243,21 @@ func _test_kinder() -> void:
 	monster._visual.rotation.y = PI   # face towards -z, where the robot is
 	monster._cooldown = 100.0          # look, don't grab (for now)
 	monster._grace = 0.0               # skip the "just spawned, still sleepy" seconds
+	monster.set_physics_process(true)
+	await _settle(10)
+	_check(not monster.chasing and spotted[0] == 0, "a monster from another room ignores you even when you're right in front of it")
+	monster._cooldown = 0.0
+	monster.global_position = start + Vector3(0.6, 0.1, 0.0)
+	await _settle(5)
+	_check(not level._caught and robot.active, "...and can't grab you from outside its room either")
+	monster._cooldown = 100.0
+	monster.set_physics_process(false)
+
+	# a monster from YOUR room seeing you: bloody letters + red edges + a scream, and it comes for you
+	monster._room = start_room
+	monster._home = start + Vector3(0, 0.1, 6.0)
+	monster.global_position = monster._home
+	monster._visual.rotation.y = PI
 	monster.set_physics_process(true)
 	await _settle(10)
 	var blood: Control = level.get_node("HUD/BloodText")
@@ -253,6 +275,7 @@ func _test_kinder() -> void:
 
 	# a monster catching the robot: jump-scare (frozen, screen goes dark), then the LEVEL RESTARTS
 	monster._cooldown = 0.0
+	monster._room = -1   # let it roam anywhere for this bit
 	monster.global_position = robot.global_position + Vector3(0.5, 0, 0)
 	await _settle(5)
 	var fade: ColorRect = level.get_node("HUD/Fade")
@@ -271,6 +294,8 @@ func _test_kinder() -> void:
 	toys = get_nodes_in_group("battery")
 	_check(game.collected == 0 and toys.size() == _count_in_map("T"), "restart: toys back to 0/%d" % toys.size())
 	_check(robot.global_position.distance_to(start) < 1.0 and robot.active and not level._caught, "restart: you're back at the start and can move")
+	for m in get_nodes_in_group("monster"):
+		m.set_physics_process(false)   # nobody grabs us while we teleport round the toys
 
 	# collect every toy -> exit opens; walk out -> escaped
 	var exit_door: StaticBody3D = world.get_node("ExitDoor")

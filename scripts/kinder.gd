@@ -18,7 +18,7 @@ const MAP: Array[String] = [
 	"#..................#",
 	"#.T..........L...T.#",
 	"#......J...........#",
-	"#....T........O....#",
+	"#....T.............#",
 	"##########3#########",
 	"#......#...........#",
 	"#..T...#...........#",
@@ -30,7 +30,7 @@ const MAP: Array[String] = [
 	"#....W.#.....P.....#",
 	"#WWWWW.#.....L.....#",
 	"#......#..T........#",
-	"#..T...#...........#",
+	"#..T...#.........O.#",
 	"####################",
 ]
 
@@ -103,6 +103,7 @@ var _flicker := 0.0
 var _scare_flash := 0.0
 var _time := 0.0
 var _toy_count := 0
+var _rooms: Dictionary = {}   # Vector2i cell -> room number
 
 
 func _ready() -> void:
@@ -319,6 +320,7 @@ func _restart() -> void:
 func _build_grid() -> void:
 	var rows := MAP.size()
 	var cols := MAP[0].length()
+	_build_rooms()
 	_grid = AStarGrid2D.new()
 	_grid.region = Rect2i(0, 0, cols, rows)
 	_grid.cell_size = Vector2(TILE, TILE)
@@ -347,6 +349,41 @@ func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 
 func is_walkable(pos: Vector3) -> bool:
 	return not _grid.is_point_solid(_cell_of(pos))
+
+
+## Rooms: every floor tile gets a room number; walls, low walls and doorways split rooms.
+## Monsters never leave the room they were born in, so a doorway is always an escape.
+func _build_rooms() -> void:
+	var rows := MAP.size()
+	var cols := MAP[0].length()
+	var next_room := 0
+	for row in rows:
+		for col in cols:
+			var cell := Vector2i(col, row)
+			if _rooms.has(cell) or not _is_room_floor(MAP[row][col]):
+				continue
+			var stack: Array[Vector2i] = [cell]
+			_rooms[cell] = next_room
+			while not stack.is_empty():
+				var here: Vector2i = stack.pop_back()
+				for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var n: Vector2i = here + step
+					if n.x < 0 or n.y < 0 or n.x >= cols or n.y >= rows:
+						continue
+					if _rooms.has(n) or not _is_room_floor(MAP[n.y][n.x]):
+						continue
+					_rooms[n] = next_room
+					stack.append(n)
+			next_room += 1
+
+
+func _is_room_floor(ch: String) -> bool:
+	return not (ch == "#" or ch == "W" or ch == "X" or (ch >= "1" and ch <= "9"))
+
+
+## Room number at a world position; -1 in a doorway, a wall, or outside.
+func room_at(pos: Vector3) -> int:
+	return _rooms.get(_cell_of(pos), -1)
 
 
 func _cell_of(pos: Vector3) -> Vector2i:

@@ -29,6 +29,7 @@ and how hard the monsters are is at the top of `scripts/monster.gd`. Best first 
 - "Make the tall one pink." / "Make the bird's legs purple." (`color` per kind in `_apply_kind`, monster.gd)
 - "Make the monsters slower / faster / easier." (`chase_speed`, `see_distance`, `lose_after` in monster.gd)
 - "Make them hear me from further away." (`hear_distance`)
+- "Let the bird follow me anywhere / through doors." (set that monster's `_room = -1` in monster.gd)
 - "Change the bloody words when I get seen." (`scare_words` in kinder.gd)
 - "Paint the walls green and purple." (`WALL_COLORS` in kinder.gd)
 - "Make the drone sound higher / louder." (`drone` in sfx.gd, `_update_whine` in drone.gd)
