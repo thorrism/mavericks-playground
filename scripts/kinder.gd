@@ -1,12 +1,13 @@
 extends Node3D
 ## KINDER ESCAPE - a dark, abandoned kindergarten you have to escape from. First person.
-## You have a flashlight. THEY have very good eyes.
+## You have a flashlight. THEY have very good eyes - and they know the way around.
 ## The whole level is drawn with the text map below. Edit the map = edit the level!
 ##
 ##   #  wall              .  floor            P  where you start
 ##   W  low wall (only the drone can fly over it)
-##   =  fence (you can jump over it)
-##   T  toy to collect    M  monster           X  exit door (opens when all toys are found)
+##   =  fence (you can jump over it - THEY just step over it)
+##   T  toy to collect                         X  exit door (opens when all toys are found)
+##   M  the tall one (Banban-ish)   J  the giant (Jumbo Josh-ish)   O  the bird (Opila-ish)
 ##   L  a flickering ceiling lamp
 ##   1 2 3  doors         a b c  buttons       button a opens door 1, b opens 2, c opens 3
 ##
@@ -15,9 +16,9 @@ extends Node3D
 const MAP: Array[String] = [
 	"##########X#########",
 	"#..................#",
-	"#.T....M....L....T.#",
-	"#..................#",
-	"#....T.............#",
+	"#.T..........L...T.#",
+	"#......J...........#",
+	"#....T........O....#",
 	"##########3#########",
 	"#......#...........#",
 	"#..T...#...........#",
@@ -33,21 +34,27 @@ const MAP: Array[String] = [
 	"####################",
 ]
 
+const MONSTER_LETTERS := "MJO"
+
 const TILE := 2.0
 const WALL_HEIGHT := 3.0
 const LOW_WALL_HEIGHT := 1.6
 const FENCE_HEIGHT := 0.7
 
-# Colours - grimy and faded. Change these to redecorate!
+# Colours - faded kindergarten paint under years of grime. Change these to redecorate!
 const FLOOR_COLOR := Color("4a4640")
 const CEILING_COLOR := Color("2a2826")
 const OUTSIDE_COLOR := Color("101a10")
-const WALL_COLORS: Array[Color] = [Color("5a3f4a"), Color("3f5a5a"), Color("6b5a2f"), Color("4a5a3f"), Color("4a3f5a")]
+const WALL_COLORS: Array[Color] = [Color("7a4f62"), Color("4b7a78"), Color("8c7a3c"), Color("5f7d4b"), Color("5c4d80"), Color("8a5a3a")]
+const STRIPE_COLORS: Array[Color] = [Color("d9a6bd"), Color("9bd6d0"), Color("e8d27a"), Color("b3d69b"), Color("b3a0e0"), Color("e0a880")]
+const SKIRTING_COLOR := Color("1c1a18")
+const POSTER_COLORS: Array[Color] = [Color("d94a4a"), Color("4a7bd9"), Color("e0c040"), Color("58b060"), Color("d97ad0"), Color("e08a40")]
+const BLOOD_COLOR := Color("4a0808")
+const WALL_WORDS: Array[String] = ["RUN", "don't let them see you", "HELP", "they can hear you", "it's behind you", "NO WAY OUT", "hide", "6 toys"]
 const LOW_WALL_COLOR := Color("3a4a4c")
 const FENCE_COLOR := Color("6b5a1f")
 const DOOR_COLORS: Array[Color] = [Color("c0392b"), Color("2e6fd6"), Color("d4a017"), Color("7d3c98"), Color("00897b")]
 const EXIT_COLOR := Color("ffd700")
-const MONSTER_COLORS: Array[Color] = [Color("2f5d3a"), Color("6e2b4f"), Color("2b4a6e"), Color("6e4a2b")]
 const TOY_COLORS: Array[Color] = [Color("ff5a5a"), Color("4f8dff"), Color("ffcc33"), Color("9b5de5"), Color("00c2a8"), Color("ff8c42")]
 const LAMP_COLORS: Array[Color] = [Color("9fffb0"), Color("ffb090"), Color("b0c8ff")]
 
@@ -58,6 +65,9 @@ const MonsterScript := preload("res://scripts/monster.gd")
 const DroneScript := preload("res://scripts/drone.gd")
 const LampScript := preload("res://scripts/lamp.gd")
 
+## Fences live on this physics layer: the player and drone bump into them, monsters walk through.
+const FENCE_LAYER := 2
+
 # Spooky settings
 @export_group("Scary")
 @export var flashlight_range := 18.0      # how far your light reaches
@@ -67,11 +77,14 @@ const LampScript := preload("res://scripts/lamp.gd")
 @export var mouse_sensitivity := 0.0025
 @export var touch_sensitivity := 0.006
 @export var eye_height := 1.5
+@export var scare_words: Array[String] = ["RUN", "IT SEES YOU", "DON'T LOOK BACK", "RUN RUN RUN", "IT'S COMING"]
 
 @onready var robot: CharacterBody3D = $Robot
 @onready var camera: Camera3D = $Camera3D
 @onready var flashlight: SpotLight3D = $Camera3D/Flashlight
 @onready var fade: ColorRect = $HUD/Fade
+@onready var vignette: ColorRect = $HUD/Vignette
+@onready var blood_text: Control = $HUD/BloodText
 @onready var env: WorldEnvironment = $WorldEnvironment
 
 var drone: CharacterBody3D
@@ -81,23 +94,33 @@ var _escaped := false
 var _caught := false
 var _exit_z := 0.0
 var _world: Node3D
+var _grid: AStarGrid2D
 var _yaw := 0.0
 var _pitch := 0.0
 var _bob_time := 0.0
+var _shake := 0.0
+var _flicker := 0.0
+var _scare_flash := 0.0
+var _time := 0.0
+var _toy_count := 0
 
 
 func _ready() -> void:
 	_world = Node3D.new()
 	_world.name = "World"
 	add_child(_world)
+	_build_grid()
 	_build_level()
-	Game.reset_level(get_tree().get_nodes_in_group("battery").size())
+	Game.reset_level(_toy_count)
 	Game.all_collected.connect(_on_all_toys_found)
 	Game.caught.connect(_on_caught)
+	Game.spotted.connect(_on_spotted)
 
+	robot.collision_mask |= 1 << (FENCE_LAYER - 1)
 	drone = CharacterBody3D.new()
 	drone.name = "Drone"
 	drone.set_script(DroneScript)
+	drone.collision_mask |= 1 << (FENCE_LAYER - 1)
 	var shape := CollisionShape3D.new()
 	var sphere := SphereShape3D.new()
 	sphere.radius = 0.3
@@ -105,6 +128,7 @@ func _ready() -> void:
 	shape.name = "Shape"
 	drone.add_child(shape)
 	add_child(drone)
+	drone.set_body_visible(false)   # the camera rides inside it; rotors in your face are no fun
 	_set_drone_active(false, true)
 
 	flashlight.spot_range = flashlight_range
@@ -137,28 +161,58 @@ func _look(delta: Vector2) -> void:
 
 
 func _process(delta: float) -> void:
+	_time += delta
 	_look(TouchControls.look_delta() * touch_sensitivity)
 	_update_camera(delta)
+	_update_fear(delta)
 
 	if not _caught and not _escaped and (Input.is_action_just_pressed("drone") or TouchControls.drone_just_pressed()):
 		_set_drone_active(not drone.active)
 
-	if not _escaped and robot.global_position.z < _exit_z - TILE * 0.5:
-		_escaped = true
-		Game.say("YOU ESCAPED...  for now.   Press R to go back in")
+	if not _escaped and not _caught and robot.global_position.z < _exit_z - TILE * 0.5:
+		_on_escaped()
 
 
 func _update_camera(delta: float) -> void:
 	var focus: Node3D = drone if drone.active else robot
 	robot.move_yaw = _yaw
 	drone.move_yaw = _yaw
-	var height := 0.2 if drone.active else eye_height
+	var height := 0.35 if drone.active else eye_height
 	# a little head-bob while walking
 	if not drone.active and Vector2(robot.velocity.x, robot.velocity.z).length() > 1.0 and robot.is_on_floor():
 		_bob_time += delta * 10.0
 		height += sin(_bob_time) * 0.05
-	camera.global_position = focus.global_position + Vector3(0, height, 0)
-	camera.rotation = Vector3(_pitch, _yaw, 0.0)
+	var shake := Vector3.ZERO
+	if _shake > 0.001:
+		shake = Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0.0) * _shake * 0.08
+	camera.global_position = focus.global_position + Vector3(0, height, 0) + shake
+	camera.rotation = Vector3(_pitch + shake.y * 0.5, _yaw + shake.x * 0.5, shake.x * 0.6)
+
+
+## Red edges that pulse while hunted, camera shake, a flashlight that stutters when you're scared.
+func _update_fear(delta: float) -> void:
+	_shake = move_toward(_shake, 0.0, delta * 1.2)
+	_scare_flash = move_toward(_scare_flash, 0.0, delta * 0.8)
+	_flicker = move_toward(_flicker, 0.0, delta)
+
+	var nearest := INF
+	for m in get_tree().get_nodes_in_group("monster"):
+		if m.chasing:
+			nearest = minf(nearest, m.global_position.distance_to(robot.global_position))
+	var hunted := nearest < INF
+	var vignette_target := 0.0
+	if hunted:
+		var closeness: float = clampf(1.0 - nearest / 14.0, 0.0, 1.0)
+		vignette_target = 0.35 + closeness * 0.4 + sin(_time * 7.0) * 0.08
+		_shake = maxf(_shake, closeness * closeness * 0.25)
+	var mat := vignette.material as ShaderMaterial
+	var current: float = mat.get_shader_parameter("strength")
+	mat.set_shader_parameter("strength", clampf(move_toward(current, vignette_target, delta * 1.5) + _scare_flash * 0.6, 0.0, 1.0))
+
+	if _flicker > 0.0:
+		flashlight.light_energy = flashlight_energy * (0.15 if randf() < 0.35 else 1.0)
+	elif flashlight.light_energy != flashlight_energy:
+		flashlight.light_energy = flashlight_energy
 
 
 func _set_drone_active(on: bool, silent := false) -> void:
@@ -168,7 +222,11 @@ func _set_drone_active(on: bool, silent := false) -> void:
 	robot.active = not on
 	robot.set_body_visible(on)   # you can look back and see yourself standing there
 	if on:
-		drone.global_position = robot.global_position + Vector3(0, 1.2, 0) + Vector3(0, 0, -0.8).rotated(Vector3.UP, _yaw)
+		# launch from your hand; if that spot is inside a wall, straight up instead
+		var ahead := robot.global_position + Vector3(0, 1.2, 0) + Vector3(0, 0, -0.8).rotated(Vector3.UP, _yaw)
+		drone.global_position = ahead
+		if drone.test_move(drone.global_transform, Vector3.ZERO):
+			drone.global_position = robot.global_position + Vector3(0, 1.4, 0)
 		drone.velocity = Vector3.ZERO
 	if silent:
 		return
@@ -178,9 +236,49 @@ func _set_drone_active(on: bool, silent := false) -> void:
 func _on_all_toys_found() -> void:
 	if exit_door:
 		exit_door.open()
+		# a golden glow so you can find the way out from across the room
+		var beacon := OmniLight3D.new()
+		beacon.name = "ExitBeacon"
+		beacon.light_color = EXIT_COLOR
+		beacon.light_energy = 3.0
+		beacon.omni_range = 9.0
+		beacon.position.y = 2.2
+		exit_door.add_child(beacon)
+	Game.say("ALL TOYS FOUND.  The GOLDEN DOOR at the top of the school is open.  RUN!", 6.0)
 
 
-## A monster got you: freeze, stare at it, red flash, black, wake up at the start.
+## You made it out: freeze, fade to white-gold, and start a fresh level.
+func _on_escaped() -> void:
+	_escaped = true
+	if drone.active:
+		_set_drone_active(false, true)
+	robot.active = false
+	robot.velocity = Vector3.ZERO
+	Game.say("YOU ESCAPED!", 4.0)
+	blood_text.scare("YOU ESCAPED", 3.5)
+	fade.color = Color(1.0, 0.9, 0.6, 1.0)
+	fade.modulate.a = 0.0
+	var tween := create_tween()
+	tween.tween_interval(1.5)
+	tween.tween_property(fade, "modulate:a", 1.0, 1.5)
+	tween.tween_interval(0.8)
+	tween.tween_callback(_restart)
+
+
+## Something SAW you: bloody letters, red flash, shake, flashlight stutters.
+func _on_spotted(monster: Node3D) -> void:
+	if _caught or _escaped:
+		return
+	_shake = maxf(_shake, 0.6)
+	_scare_flash = 1.0
+	_flicker = 0.7
+	var words: String = scare_words[randi() % scare_words.size()]
+	if "kind_name" in monster and randf() < 0.3:
+		words = monster.kind_name.to_upper() + " SEES YOU"
+	blood_text.scare(words)
+
+
+## A monster got you: freeze, stare at it, red flash, black... and the whole level starts over.
 func _on_caught(monster: Node3D) -> void:
 	if _caught or _escaped:
 		return
@@ -188,26 +286,75 @@ func _on_caught(monster: Node3D) -> void:
 	if drone.active:
 		_set_drone_active(false, true)
 	robot.active = false
+	_shake = 1.0
 	var to_monster := monster.global_position - robot.global_position
 	_yaw = atan2(-to_monster.x, -to_monster.z)
 	_pitch = 0.35
+	blood_text.scare("IT GOT YOU", 2.2)
 	fade.color = Color(0.5, 0.0, 0.0, 1.0)
 	fade.modulate.a = 0.0
 	var tween := create_tween()
 	tween.tween_property(fade, "modulate:a", 0.8, 0.12)
 	tween.tween_property(fade, "modulate:a", 0.3, 0.25)
-	tween.tween_property(fade, "color", Color.BLACK, 0.35)
-	tween.parallel().tween_property(fade, "modulate:a", 1.0, 0.35)
-	tween.tween_callback(func():
-		robot.respawn()
-		_yaw = 0.0
-		_pitch = 0.0
-		Game.say("It found you.  Try again...", 3.0))
-	tween.tween_interval(0.6)
-	tween.tween_property(fade, "modulate:a", 0.0, 1.2)
-	tween.tween_callback(func():
-		robot.active = true
-		_caught = false)
+	tween.tween_property(fade, "color", Color.BLACK, 0.5)
+	tween.parallel().tween_property(fade, "modulate:a", 1.0, 0.5)
+	tween.tween_interval(1.2)
+	tween.tween_callback(_restart)
+
+
+func _restart() -> void:
+	var tree := get_tree()
+	if tree.current_scene == self:
+		tree.reload_current_scene()
+	else:
+		# not the running scene (e.g. inside a test): rebuild in place instead
+		var fresh: Node = load(scene_file_path).instantiate()
+		get_parent().add_child(fresh)
+		queue_free()
+
+
+# ---------------------------------------------------------------------------
+# Finding the way: a grid the monsters use to walk around walls
+# ---------------------------------------------------------------------------
+func _build_grid() -> void:
+	var rows := MAP.size()
+	var cols := MAP[0].length()
+	_grid = AStarGrid2D.new()
+	_grid.region = Rect2i(0, 0, cols, rows)
+	_grid.cell_size = Vector2(TILE, TILE)
+	_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	_grid.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	_grid.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	_grid.update()
+	for row in rows:
+		for col in cols:
+			var ch := MAP[row][col]
+			if ch == "#" or ch == "W" or ch == "X" or (ch >= "1" and ch <= "9"):
+				_grid.set_point_solid(Vector2i(col, row), true)
+
+
+## Waypoints (world positions, tile centres) from one place to another. Empty if unreachable.
+func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
+	var a := _cell_of(from)
+	var b := _cell_of(to)
+	var out := PackedVector3Array()
+	if _grid.is_point_solid(a) or _grid.is_point_solid(b):
+		return out
+	for cell in _grid.get_id_path(a, b):
+		out.append(_tile_pos(cell.y, cell.x))
+	return out
+
+
+func is_walkable(pos: Vector3) -> bool:
+	return not _grid.is_point_solid(_cell_of(pos))
+
+
+func _cell_of(pos: Vector3) -> Vector2i:
+	var cols := MAP[0].length()
+	var rows := MAP.size()
+	var col := clampi(floori(pos.x / TILE + cols / 2.0), 0, cols - 1)
+	var row := clampi(floori(pos.z / TILE + rows / 2.0), 0, rows - 1)
+	return Vector2i(col, row)
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +368,12 @@ func _build_level() -> void:
 	# floor (a bit bigger than the map so there's an "outside" to escape to) + ceiling
 	var floor_size := Vector3((cols + 6) * TILE, 1.0, (rows + 8) * TILE)
 	_add_box(_world, Vector3(0, -0.52, 0), floor_size, OUTSIDE_COLOR, true)
+	# invisible fence round the edge of the world so nobody can fall off it
+	for side in [-1.0, 1.0]:
+		var x_wall := _add_box(_world, Vector3(side * (floor_size.x / 2.0 + 0.5), 2.5, 0), Vector3(1.0, 6.0, floor_size.z + 2.0), OUTSIDE_COLOR, true)
+		x_wall.visible = false
+		var z_wall := _add_box(_world, Vector3(0, 2.5, side * (floor_size.z / 2.0 + 0.5)), Vector3(floor_size.x + 2.0, 6.0, 1.0), OUTSIDE_COLOR, true)
+		z_wall.visible = false
 	# floor + ceiling are built one strip per map row (the mobile renderer only
 	# lights a mesh with its 8 nearest lights, and there are many small lights here)
 	for row in rows:
@@ -239,12 +392,15 @@ func _build_level() -> void:
 			var pos := _tile_pos(row, col)
 			match ch:
 				"#":
-					var color := WALL_COLORS[(floori(row / 3.0) + floori(col / 3.0)) % WALL_COLORS.size()]
+					var region := _region_of(row, col)
+					var color := WALL_COLORS[region % WALL_COLORS.size()]
 					_add_box(_world, pos + Vector3(0, WALL_HEIGHT / 2.0, 0), Vector3(TILE, WALL_HEIGHT, TILE), color, true)
+					_decorate_wall(row, col, pos, region)
 				"W":
 					_add_box(_world, pos + Vector3(0, LOW_WALL_HEIGHT / 2.0, 0), Vector3(TILE, LOW_WALL_HEIGHT, TILE), LOW_WALL_COLOR, true)
 				"=":
-					_add_box(_world, pos + Vector3(0, FENCE_HEIGHT / 2.0, 0), Vector3(TILE, FENCE_HEIGHT, TILE), FENCE_COLOR, true)
+					var fence := _add_box(_world, pos + Vector3(0, FENCE_HEIGHT / 2.0, 0), Vector3(TILE, FENCE_HEIGHT, TILE), FENCE_COLOR, true)
+					fence.collision_layer = 1 << (FENCE_LAYER - 1)
 				"P":
 					robot.position = pos + Vector3(0, 0.1, 0)
 					robot.set_spawn_here()
@@ -255,21 +411,7 @@ func _build_level() -> void:
 					_world.add_child(toy)
 					_tint_toy(toy, TOY_COLORS[toy_index % TOY_COLORS.size()])
 					toy_index += 1
-				"M":
-					var monster := CharacterBody3D.new()
-					monster.name = "Monster%d" % (monster_index + 1)
-					monster.set_script(MonsterScript)
-					monster.color = MONSTER_COLORS[monster_index % MONSTER_COLORS.size()]
-					var shape := CollisionShape3D.new()
-					var capsule := CapsuleShape3D.new()
-					capsule.radius = 0.5
-					capsule.height = 2.0
-					shape.shape = capsule
-					shape.position.y = 1.0
-					monster.add_child(shape)
-					monster.position = pos + Vector3(0, 0.1, 0)
-					_world.add_child(monster)
-					monster_index += 1
+					_toy_count = toy_index
 				"L":
 					var lamp := Node3D.new()
 					lamp.name = "Lamp%d" % (lamp_index + 1)
@@ -279,12 +421,20 @@ func _build_level() -> void:
 					_world.add_child(lamp)
 					lamp_index += 1
 				"X":
-					exit_door = _make_door(pos, EXIT_COLOR, _door_faces_x(row, col, rows, cols))
+					exit_door = _make_door(pos, EXIT_COLOR, _door_faces_x(row, col, rows, cols), Vector2i(col, row))
 					exit_door.name = "ExitDoor"
 				_:
-					if ch >= "1" and ch <= "9":
+					if ch in MONSTER_LETTERS:
+						var monster := CharacterBody3D.new()
+						monster.name = "Monster%d" % (monster_index + 1)
+						monster.set_script(MonsterScript)
+						monster.kind = MONSTER_LETTERS.find(ch)
+						monster.position = pos + Vector3(0, 0.1, 0)
+						_world.add_child(monster)
+						monster_index += 1
+					elif ch >= "1" and ch <= "9":
 						var idx := int(ch) - 1
-						var door := _make_door(pos, DOOR_COLORS[idx % DOOR_COLORS.size()], _door_faces_x(row, col, rows, cols))
+						var door := _make_door(pos, DOOR_COLORS[idx % DOOR_COLORS.size()], _door_faces_x(row, col, rows, cols), Vector2i(col, row))
 						door.name = "Door%s" % ch
 						_doors[ch] = door
 					elif ch >= "a" and ch <= "i":
@@ -307,12 +457,105 @@ func _build_level() -> void:
 				Game.say("*clunk*   A door opened somewhere...", 2.5))
 
 
-func _make_door(pos: Vector3, color: Color, along_x: bool) -> StaticBody3D:
+## Which "room" a wall belongs to (for colours): rooms are split by the map's inner walls.
+func _region_of(row: int, col: int) -> int:
+	if row <= 5:
+		return 0
+	if col <= 7:
+		return 1 if row <= 11 else 2
+	return 3 if row <= 10 else 4
+
+
+## Skirting board, a painted stripe, and now and then a peeling poster, a bloody
+## handprint or something scrawled in crayon - on every wall face that looks into a room.
+func _decorate_wall(row: int, col: int, pos: Vector3, region: int) -> void:
+	var rows := MAP.size()
+	var cols := MAP[0].length()
+	var faces: Array[Vector2i] = [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]   # (drow, dcol)
+	for face in faces:
+		var r := row + face.x
+		var c := col + face.y
+		if r < 0 or r >= rows or c < 0 or c >= cols:
+			continue
+		var beside := MAP[r][c]
+		if beside == "#" or beside == "W":
+			continue
+		var along_x := face.x != 0   # wall face runs left-right
+		var normal := Vector3(face.y, 0, face.x)
+		var base := pos + normal * (TILE / 2.0 + 0.012)
+		var hash_value := (row * 73 + col * 151 + (face.x + 1) * 7 + (face.y + 1) * 3) % 100
+
+		_add_box(_world, base + Vector3(0, 0.15, 0), _flat(along_x, TILE, 0.3), SKIRTING_COLOR, false)
+		var stripe_color := STRIPE_COLORS[region % STRIPE_COLORS.size()]
+		_add_box(_world, base + Vector3(0, 1.35, 0), _flat(along_x, TILE, 0.22), stripe_color.darkened(0.35), false)
+		if hash_value % 3 == 0:
+			_add_box(_world, base + Vector3(0, 1.1, 0), _flat(along_x, TILE, 0.06), stripe_color.darkened(0.55), false)
+
+		if hash_value < 22:
+			_add_poster(base + normal * 0.01, along_x, POSTER_COLORS[hash_value % POSTER_COLORS.size()], hash_value)
+		elif hash_value < 34:
+			_add_handprint(base + normal * 0.01, along_x, hash_value)
+		elif hash_value < 46:
+			_add_scrawl(base + normal * 0.015, normal, WALL_WORDS[hash_value % WALL_WORDS.size()], hash_value)
+
+
+func _flat(along_x: bool, width: float, height: float) -> Vector3:
+	return Vector3(width, height, 0.02) if along_x else Vector3(0.02, height, width)
+
+
+## A faded kids' poster, hanging crooked, one corner peeled.
+func _add_poster(pos: Vector3, along_x: bool, color: Color, seed_value: int) -> void:
+	var holder := Node3D.new()
+	holder.position = pos + Vector3(0, 1.9 + (seed_value % 5) * 0.06, 0)
+	holder.rotation.y = 0.0 if along_x else PI / 2.0
+	holder.rotation.z = ((seed_value % 7) - 3) * 0.04
+	_world.add_child(holder)
+	var paper := _add_box(holder, Vector3.ZERO, Vector3(0.7, 0.9, 0.02), color.darkened(0.45), false)
+	_add_box(paper, Vector3(0, 0.1, 0.015), Vector3(0.45, 0.45, 0.01), color.lightened(0.3).darkened(0.2), false)
+	_add_box(paper, Vector3(0, -0.3, 0.015), Vector3(0.5, 0.1, 0.01), Color("e8e2d0").darkened(0.35), false)
+	var peel := _add_box(paper, Vector3(0.28, 0.38, 0.03), Vector3(0.18, 0.18, 0.01), color.darkened(0.7), false)
+	peel.rotation.z = 0.5
+
+
+## A small red handprint, dragged downwards.
+func _add_handprint(pos: Vector3, along_x: bool, seed_value: int) -> void:
+	var holder := Node3D.new()
+	holder.position = pos + Vector3(0, 1.0 + (seed_value % 4) * 0.15, 0)
+	holder.rotation.y = 0.0 if along_x else PI / 2.0
+	holder.rotation.z = ((seed_value % 5) - 2) * 0.2
+	_world.add_child(holder)
+	_add_box(holder, Vector3.ZERO, Vector3(0.16, 0.2, 0.01), BLOOD_COLOR, false)
+	for i in 4:
+		_add_box(holder, Vector3((i - 1.5) * 0.045, 0.17, 0), Vector3(0.035, 0.16, 0.01), BLOOD_COLOR, false)
+	_add_box(holder, Vector3(0.1, 0.05, 0), Vector3(0.035, 0.1, 0.01), BLOOD_COLOR, false)
+	for i in 3:
+		var drip := _add_box(holder, Vector3((i - 1) * 0.05, -0.2 - i * 0.07, 0), Vector3(0.02, 0.25 + i * 0.1, 0.01), BLOOD_COLOR, false)
+		drip.position.y -= drip.mesh.size.y / 2.0 - 0.1
+
+
+## Words scratched into the paint.
+func _add_scrawl(pos: Vector3, normal: Vector3, words: String, seed_value: int) -> void:
+	var label := Label3D.new()
+	label.text = words
+	label.font_size = 96 if words.length() < 6 else 56
+	label.pixel_size = 0.004
+	label.modulate = BLOOD_COLOR.lightened(0.15)
+	label.outline_modulate = Color(0.1, 0.0, 0.0)
+	label.outline_size = 6
+	label.shaded = true
+	label.position = pos + Vector3(0, 1.75 + (seed_value % 3) * 0.1, 0)
+	label.rotation.y = atan2(normal.x, normal.z)
+	label.rotation.z = ((seed_value % 5) - 2) * 0.06
+	_world.add_child(label)
+
+
+func _make_door(pos: Vector3, color: Color, along_x: bool, cell: Vector2i) -> StaticBody3D:
 	var door := StaticBody3D.new()
 	door.set_script(DoorScript)
 	door.color = color
 	door.size = Vector3(TILE, WALL_HEIGHT, 0.4) if along_x else Vector3(0.4, WALL_HEIGHT, TILE)
 	door.position = pos
+	door.opened.connect(func(): _grid.set_point_solid(cell, false))   # monsters can follow you through
 	_world.add_child(door)
 	return door
 

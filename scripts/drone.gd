@@ -15,16 +15,23 @@ var move_yaw := 0.0
 
 var _rotors: Array[Node3D] = []
 var _visual: Node3D
+var _lamp: OmniLight3D
+var _whine: AudioStreamPlayer
 
 
 func _ready() -> void:
 	add_to_group("drone")
 	_build()
+	_whine = AudioStreamPlayer.new()
+	_whine.stream = Sfx.get_sound("drone")
+	_whine.volume_db = -60.0
+	add_child(_whine)
 
 
 func _physics_process(delta: float) -> void:
 	for rotor in _rotors:
 		rotor.rotate_y(25.0 * delta)
+	_update_whine(delta)
 	if not active:
 		return
 
@@ -53,6 +60,25 @@ func _physics_process(delta: float) -> void:
 	global_position.y = clamp(global_position.y, min_height, max_height)
 
 
+## Rotor whine: fades in when you take off, rises in pitch when you push it.
+func _update_whine(delta: float) -> void:
+	if _whine == null:
+		return
+	if active and not _whine.playing:
+		_whine.play()
+	var target_db := -14.0 if active else -60.0
+	_whine.volume_db = move_toward(_whine.volume_db, target_db, delta * (120.0 if active else 60.0))
+	if not active and _whine.volume_db <= -59.0 and _whine.playing:
+		_whine.stop()
+	var effort := Vector2(velocity.x, velocity.z).length() / speed + maxf(velocity.y, 0.0) / rise_speed * 0.5
+	_whine.pitch_scale = lerpf(_whine.pitch_scale, 1.0 + effort * 0.3, 6.0 * delta)
+
+
+## First-person levels: hide the drone's own body (the camera sits inside it) but keep its lamp.
+func set_body_visible(shown: bool) -> void:
+	_visual.visible = shown
+
+
 func _build() -> void:
 	_visual = Node3D.new()
 	add_child(_visual)
@@ -74,12 +100,12 @@ func _build() -> void:
 	_visual.add_child(eye)
 
 	# a small lamp so the drone lights up the floor under it in the dark
-	var lamp := OmniLight3D.new()
-	lamp.light_color = Color("7ff7ff")
-	lamp.light_energy = 1.2
-	lamp.omni_range = 5.0
-	lamp.position.y = -0.2
-	_visual.add_child(lamp)
+	_lamp = OmniLight3D.new()
+	_lamp.light_color = Color("7ff7ff")
+	_lamp.light_energy = 1.2
+	_lamp.omni_range = 5.0
+	_lamp.position.y = -0.2
+	add_child(_lamp)
 
 	for x in [-1.0, 1.0]:
 		for z in [-1.0, 1.0]:

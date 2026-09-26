@@ -12,21 +12,26 @@ attach it. Kids want to *see* it. Keep the code in the existing files; no new sy
 The whole kindergarten is drawn at the top of `scripts/kinder.gd`:
 
 ```
-##########X#########      #  wall        T  toy        M  monster
+##########X#########      #  wall        T  toy        X  golden exit door
 #..................#      W  low wall (drone only)     =  fence (jump over)
-#.T....M....L....T.#      L  flickering lamp            1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
+#.T..J.O....L..M.T.#      L  flickering lamp            1 2 3 doors   a b c buttons  (a opens 1, b opens 2 ...)
+#..................#      M  tall teal one   J  big green one   O  yellow bird
 ```
 
-So "add a monster in the top room" is literally typing one `M`. It's dark and first person:
-the scary knobs (`flashlight_*`, `fog_density`, colours) are right under the map. Best first prompts:
+So "add a bird in the top room" is literally typing one `O`. It's dark and first person:
+the scary knobs (`flashlight_*`, `fog_density`, wall colours, `scare_words`) are right under the map,
+and how hard the monsters are is at the top of `scripts/monster.gd`. Best first prompts:
 
 ## Warm-up (30 seconds each) - change a letter, a number or a colour
 
 - "Put 3 more toys in the big room." (add `T`s to the map)
-- "Add another monster next to the start." (add an `M`)
-- "Make the monsters pink." / "Make the green monster GIANT." (`MONSTER_COLORS`, `height` in monster.gd)
-- "Make the monsters slower / faster." (`chase_speed` in monster.gd)
-- "Make the monster's eyes yellow / make them see you from further away." (`eye_color`, `see_distance`)
+- "Add another bird next to the start." (add an `O`; `M` and `J` for the other two)
+- "Make the tall one pink." / "Make the bird's legs purple." (`color` per kind in `_apply_kind`, monster.gd)
+- "Make the monsters slower / faster / easier." (`chase_speed`, `see_distance`, `lose_after` in monster.gd)
+- "Make them hear me from further away." (`hear_distance`)
+- "Change the bloody words when I get seen." (`scare_words` in kinder.gd)
+- "Paint the walls green and purple." (`WALL_COLORS` in kinder.gd)
+- "Make the drone sound higher / louder." (`drone` in sfx.gd, `_update_whine` in drone.gd)
 - "Make it even darker" / "a bit brighter". (`flashlight_energy`, `fog_density`, `ambient_light_energy` in kinder.tscn)
 - "Make the lamps flicker like crazy" / "add a lamp in the start room." (`flicker` in lamp.gd, an `L` on the map)
 - "Make the walls black and the floor lava." (colours at the top of kinder.gd)

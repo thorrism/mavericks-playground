@@ -106,7 +106,33 @@ func _test_kinder() -> void:
 	var doors := get_nodes_in_group("door")
 	var buttons := get_nodes_in_group("button")
 	_check(toys.size() == _count_in_map("T"), "%d toys placed from the map" % toys.size())
-	_check(monsters.size() == _count_in_map("M"), "%d monsters placed from the map" % monsters.size())
+	var monster_letters := _count_in_map("M") + _count_in_map("J") + _count_in_map("O")
+	_check(monsters.size() == monster_letters, "%d monsters placed from the map" % monsters.size())
+	var kinds := {}
+	for m in monsters:
+		kinds[m.kind] = true
+	_check(kinds.size() == 3, "all three monster kinds are in the level (%d kinds)" % kinds.size())
+	var tall: CharacterBody3D
+	var giant: CharacterBody3D
+	for m in monsters:
+		var has_audio := false
+		for child in m.get_children():
+			has_audio = has_audio or child is AudioStreamPlayer3D
+		_check(has_audio and m.find_children("*", "OmniLight3D", true, false).size() >= 2,
+			"%s has glowing eyes and its own 3D sound" % m.kind_name)
+		var top: float = m.model_top()
+		_check(top > 2.0 and top < level.WALL_HEIGHT - 0.1, "%s fits under the ceiling (top=%.2f m)" % [m.kind_name, top])
+		if m.kind == 0:
+			tall = m
+		elif m.kind == 1:
+			giant = m
+		m.set_physics_process(false)   # stand still while we test the mechanics; woken up further down
+	_check(level.get_node("Audio").get_child_count() >= 5, "level audio has hum, music, footsteps and effects players")
+	_check(Sfx.get_sound("chime").data.size() > 1000 and Sfx.get_sound("step0").data.size() > 1000 and Sfx.get_sound("scream").data.size() > 1000,
+		"generated sounds have data")
+	_check(get_nodes_in_group("monster").size() == monsters.size(), "monsters registered")
+	var labels := world.find_children("*", "Label3D", true, false)
+	_check(labels.size() >= 3, "%d words scrawled on the walls" % labels.size())
 	_check(doors.size() == 3 and buttons.size() == 2, "%d doors + %d buttons built" % [doors.size(), buttons.size()])
 	var label: Label = level.get_node("HUD/ScoreLabel")
 	_check(label.text == "Toys: 0/%d" % toys.size(), "HUD counts toys (%s)" % label.text)
@@ -162,6 +188,7 @@ func _test_kinder() -> void:
 	await process_frame
 	_check(drone.active and drone.visible and not robot.active, "E hands control to the drone")
 	_check(robot.get_node("Visual").visible, "you can see your body while flying the drone")
+	_check(not drone._visual.visible, "the drone's own rotors are hidden from its camera")
 	var drone_y: float = drone.global_position.y
 	Input.action_press("jump")
 	await _settle(20)
@@ -178,18 +205,72 @@ func _test_kinder() -> void:
 	Input.action_release("drone")
 	await process_frame
 	_check(not drone.active and robot.active, "E again goes back to the robot")
+	for _i in 3:   # the drone is not one-shot: out and back as often as you like
+		Input.action_press("drone")
+		await process_frame
+		Input.action_release("drone")
+		await process_frame
+	_check(drone.active and not robot.active, "E keeps working: drone can be used again and again")
+	Input.action_press("drone")
+	await process_frame
+	Input.action_release("drone")
+	await process_frame
+	_check(not drone.active and robot.active, "...and back to the body once more")
 
-	# a monster catching the robot: jump-scare (frozen, screen goes dark), then wake up at the start
-	robot.global_position = start + Vector3(6, 0.1, 0)
-	var monster: CharacterBody3D = monsters[0]
+	# monsters know the way: the tall one's path from the left room to you goes round through door 1,
+	# and the giant can only come down from the top room now that door 3 is open
+	var monster: CharacterBody3D = tall
+	var path: PackedVector3Array = level.find_path(monster.global_position, start)
+	_check(path.size() > 6, "monster finds a %d-step path around the walls to you" % path.size())
+	var down: PackedVector3Array = level.find_path(giant.global_position, start)
+	_check(not down.is_empty(), "...and the giant can get out of the top room once door 3 is open")
+	level._grid.set_point_solid(level._cell_of(world.get_node("Door3").global_position), true)
+	_check(level.find_path(giant.global_position, start).is_empty(), "...but not while it's shut")
+	level._grid.set_point_solid(level._cell_of(world.get_node("Door3").global_position), false)
+
+	# a monster SEEING you: bloody letters + red edges + a scream, and it comes for you
+	var spotted := [0]
+	game.spotted.connect(func(_by): spotted[0] += 1)
+	robot.global_position = start
+	monster.global_position = start + Vector3(0, 0.1, 6.0)
+	monster._visual.rotation.y = PI   # face towards -z, where the robot is
+	monster._cooldown = 100.0          # look, don't grab (for now)
+	monster._grace = 0.0               # skip the "just spawned, still sleepy" seconds
+	monster.set_physics_process(true)
+	await _settle(10)
+	var blood: Control = level.get_node("HUD/BloodText")
+	var vignette: ColorRect = level.get_node("HUD/Vignette")
+	_check(monster.chasing and spotted[0] >= 1, "monster spots you and starts hunting")
+	_check(blood._text != "" and blood._letters.size() > 0, "bloody letters on screen: '%s'" % blood._text)
+	await _settle(30)
+	_check(vignette.material.get_shader_parameter("strength") > 0.1, "red creeps in from the screen edges while hunted")
+	_check(monster.global_position.distance_to(robot.global_position) < 5.0, "...and it closes in (%.1fm away)" % monster.global_position.distance_to(robot.global_position))
+
+	# collect one toy so we can see the restart wipe it
+	robot.global_position = toys[0].global_position
+	await _settle(5)
+	_check(game.collected == 1, "one toy collected before dying")
+
+	# a monster catching the robot: jump-scare (frozen, screen goes dark), then the LEVEL RESTARTS
+	monster._cooldown = 0.0
 	monster.global_position = robot.global_position + Vector3(0.5, 0, 0)
 	await _settle(5)
 	var fade: ColorRect = level.get_node("HUD/Fade")
 	_check(level._caught and not robot.active and fade.modulate.a > 0.1, "monster grabs you: frozen + screen flashes")
-	await create_timer(3.5).timeout
+	await create_timer(3.0).timeout
 	await _settle(5)
-	_check(robot.global_position.distance_to(start) < 1.0, "...then you wake up back at the start")
-	_check(not level._caught and robot.active and fade.modulate.a < 0.05, "...and can move again")
+	_check(not is_instance_valid(level) or level.is_queued_for_deletion(), "...then the old level is thrown away")
+	level = null
+	for child in root.get_children():
+		if child.has_method("find_path") and not child.is_queued_for_deletion():
+			level = child
+	_check(level != null, "...and a fresh one starts")
+	await _settle(30)
+	robot = level.get_node("Robot")
+	world = level.get_node("World")
+	toys = get_nodes_in_group("battery")
+	_check(game.collected == 0 and toys.size() == _count_in_map("T"), "restart: toys back to 0/%d" % toys.size())
+	_check(robot.global_position.distance_to(start) < 1.0 and robot.active and not level._caught, "restart: you're back at the start and can move")
 
 	# collect every toy -> exit opens; walk out -> escaped
 	var exit_door: StaticBody3D = world.get_node("ExitDoor")
@@ -199,13 +280,19 @@ func _test_kinder() -> void:
 		await _settle(3)
 	await _settle(5)
 	_check(game.collected == toys.size(), "all %d toys collected" % game.collected)
-	_check(exit_door.is_open, "exit door opens when every toy is found")
+	_check(exit_door.is_open and exit_door.has_node("ExitBeacon"), "exit door opens and glows when every toy is found")
 	robot.global_position = exit_door.global_position + Vector3(0, 0.1, -3.0)
 	await process_frame
 	await process_frame
-	_check(level._escaped, "walking out through the exit counts as escaping")
-
-	level.queue_free()
+	_check(level._escaped and not robot.active, "walking out through the exit counts as escaping and stops you")
+	await create_timer(4.5).timeout
+	var after_escape: Node = null
+	for child in root.get_children():
+		if child.has_method("find_path"):
+			after_escape = child
+	_check(after_escape != null and after_escape != level and game.collected == 0, "escaping starts a fresh level")
+	if after_escape:
+		after_escape.queue_free()
 	await process_frame
 
 

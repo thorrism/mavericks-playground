@@ -5,17 +5,25 @@ It exists so a kid + a grown-up + Devin can say "make the robot green and add la
 
 ## Kinder Escape (the current game)
 
-First person. You wake up in a dark, abandoned kindergarten with only a flashlight. Tall
-things with glowing eyes wander the rooms - if one sees you it hunts you. Find all six toys,
-use your drone to reach buttons the robot can't, open the coloured doors, and escape
-through the golden exit.
+First person. You wake up in a dark, abandoned kindergarten with only a flashlight. Three
+things live here and hunt you if they see or hear you. Find all six toys, use your drone to
+reach buttons the robot can't, open the coloured doors, and escape through the golden exit
+at the very top of the school.
 
 - Almost no light: your **flashlight**, a few dying ceiling lamps that flicker, and the glow of the toys.
+- Grimy **coloured walls** with stripes, torn posters, bloody handprints and words scrawled on them.
 - Step on a **button** (or land the drone on it) and the door of the same colour opens.
 - **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
-- A **monster** that grabs you: the screen flashes red, goes black, and you wake up at the start (you keep your toys).
-- Collect every toy and the **golden door** opens.
-- Sound is generated from code: a low hum, a heartbeat that speeds up when you're being hunted, a screech when caught.
+- Three **monsters** (map letters `M`, `J`, `O`): a tall teal grinning thing with a bow tie, a huge green
+  brute, and a lanky yellow bird. They know the way around walls, run to where they last saw you and
+  search there - but you are a bit faster, so break line of sight and hide.
+- **Seen**: dripping blood letters, a scream, red screen edges, shaking, your flashlight stutters,
+  and the music turns into panic. **Caught**: red flash, black, and the level starts over.
+- Collect every toy and the **golden door** opens and glows; walk through it to escape.
+- All sound is generated from code: footsteps (yours and theirs, heavier when they chase), a toy chime,
+  a broken music-box tune, the drone's rotor whine, and each monster's own voice.
+- The **drone** is unlimited: `E` sends it out, `E` again brings you back, as often as you like.
+  Monsters ignore your parked body while you fly.
 
 | Action | Mac keyboard | iPhone |
 |---|---|---|
@@ -25,8 +33,9 @@ through the golden exit.
 | Switch robot <-> drone | E | DRONE button |
 | Restart | R | - |
 
-Too dark / too scary / not scary enough? The knobs are at the top of `scripts/kinder.gd`
-(`flashlight_*`, `fog_density`, the colours) and `scripts/monster.gd` (speed, eyes, how far it sees).
+Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
+(`flashlight_*`, `fog_density`, wall colours, the scare words) and `scripts/monster.gd`
+(`chase_speed`, `see_distance`, `hear_distance`, `lose_after`, `spawn_grace` - per kind in `_apply_kind`).
 
 The whole level is a **text map** at the top of `scripts/kinder.gd` - move a `T`, add an `M`,
 hang a lamp with `L`, draw a new room with `#`, and re-run. The original battery arena is still there too: `make arena`.
@@ -53,9 +62,11 @@ Export templates go in `~/Library/Application Support/Godot/export_templates/4.7
 ```
 scenes/kinder.tscn      Kinder Escape: dark environment/fog, first-person camera + flashlight, HUD, fade, touch controls
 scripts/kinder.gd       THE MAP (text) + colours + scary knobs + builds walls/doors/buttons/toys/monsters/lamps
-scripts/monster.gd      the lurking/hunting monster (look + behaviour settings at the top)
+scripts/monster.gd      the three monsters: behaviour knobs at the top, brain (A* paths, seeing/hearing), then the models
 scripts/lamp.gd         a flickering ceiling lamp (`L` on the map)
-scripts/spooky_audio.gd hum / heartbeat / screech, all generated from maths
+scripts/spooky_audio.gd hum / music box / panic music / your footsteps / chime / scream
+scripts/sfx.gd          every sound effect, generated from maths (add a new one here)
+scripts/blood_text.gd   the dripping blood letters
 scripts/drone.gd        the flying drone (speed, how high it can go)
 scripts/door.gd         a sliding door
 scripts/button_pad.gd   a floor button
