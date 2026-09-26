@@ -1,6 +1,6 @@
 [gd_scene load_steps=20 format=3]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/arena.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/robot.tscn" id="2_robot"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="3_hud"]
 [ext_resource type="Script" path="res://scripts/touch_controls.gd" id="4_touch"]
@@ -64,7 +64,7 @@ size = Vector3(4, 0.4, 7)
 [sub_resource type="BoxShape3D" id="RampShape"]
 size = Vector3(4, 0.4, 7)
 
-[node name="Main" type="Node3D"]
+[node name="Arena" type="Node3D"]
 script = ExtResource("1_main")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]

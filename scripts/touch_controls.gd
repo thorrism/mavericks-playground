@@ -13,6 +13,8 @@ var _joy_knob: Control
 var _joy_touch_index := -1
 var _joy_vector := Vector2.ZERO
 var _jump_queued := false
+var _jump_held := false
+var _drone_queued := false
 
 
 func _ready() -> void:
@@ -21,7 +23,10 @@ func _ready() -> void:
 	_joy_knob = $Joystick/Knob
 	# run with `godot -- --touch` to try the touch controls on a Mac
 	visible = OS.has_feature("mobile") or "--touch" in OS.get_cmdline_user_args()
-	$JumpButton.pressed.connect(func(): _jump_queued = true)
+	$JumpButton.button_down.connect(func(): _jump_queued = true; _jump_held = true)
+	$JumpButton.button_up.connect(func(): _jump_held = false)
+	if has_node("DroneButton"):
+		$DroneButton.pressed.connect(func(): _drone_queued = true)
 
 
 func _input(event: InputEvent) -> void:
@@ -56,5 +61,18 @@ static func direction() -> Vector2:
 static func jump_just_pressed() -> bool:
 	if _instance and _instance._jump_queued:
 		_instance._jump_queued = false
+		return true
+	return false
+
+
+## True while the jump button is being held down (the drone uses this to rise).
+static func jump_held() -> bool:
+	return _instance != null and _instance._jump_held
+
+
+## Returns true once per tap of the DRONE button.
+static func drone_just_pressed() -> bool:
+	if _instance and _instance._drone_queued:
+		_instance._drone_queued = false
 		return true
 	return false

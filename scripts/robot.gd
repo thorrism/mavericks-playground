@@ -27,6 +27,9 @@ enum HeadShape { BOX, BALL, CAN }
 @export var gravity := 22.0
 @export var turn_speed := 12.0
 
+## False while you are flying the drone: the robot stands still and waits.
+var active := true
+
 var _visual: Node3D
 var _left_arm: Node3D
 var _right_arm: Node3D
@@ -47,13 +50,15 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= gravity * delta
 
 	# --- jump ---
-	if is_on_floor() and (Input.is_action_just_pressed("jump") or TouchControls.jump_just_pressed()):
+	if active and is_on_floor() and (Input.is_action_just_pressed("jump") or TouchControls.jump_just_pressed()):
 		velocity.y = jump_power
 
 	# --- walk (keyboard / gamepad / touch joystick) ---
-	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	if input.length() < 0.1:
-		input = TouchControls.direction()
+	var input := Vector2.ZERO
+	if active:
+		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+		if input.length() < 0.1:
+			input = TouchControls.direction()
 	var direction := Vector3(input.x, 0.0, input.y)
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
@@ -82,6 +87,11 @@ func _physics_process(delta: float) -> void:
 func respawn() -> void:
 	global_position = _spawn_position
 	velocity = Vector3.ZERO
+
+
+## Make wherever the robot is right now the place it goes back to.
+func set_spawn_here() -> void:
+	_spawn_position = global_position
 
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,15 @@
 GODOT ?= godot
 BUILD  := build
 
-.PHONY: run touch test import editor mac ios ios-sim clean
+.PHONY: run arena touch test import editor mac ios ios-sim clean
 
-## Play the game on this Mac (keyboard: WASD / arrows, Space = jump, R = restart)
+## Play the game on this Mac (keyboard: WASD / arrows, Space = jump, E = drone, R = restart)
 run: import
 	$(GODOT) --path . -- $(ARGS)
+
+## Play the original open-arena battery game instead
+arena: import
+	$(GODOT) --path . scenes/arena.tscn -- $(ARGS)
 
 ## Play on the Mac but with the iPhone touch controls showing (click = finger)
 touch: import
