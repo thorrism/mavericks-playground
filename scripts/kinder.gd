@@ -272,11 +272,11 @@ func _on_escaped() -> void:
 func _on_spotted(monster: Node3D) -> void:
 	if _caught or _escaped:
 		return
-	_shake = maxf(_shake, 0.6)
-	_scare_flash = 1.0
-	_flicker = 0.7
+	_shake = maxf(_shake, 0.5)
+	_scare_flash = 0.85
+	_flicker = 0.6
 	var words: String = scare_words[randi() % scare_words.size()]
-	blood_text.scare(words.replace("NAME", _name_of(monster)))
+	blood_text.scare(words.replace("NAME", _name_of(monster)), 2.4)
 
 
 ## It swung and hit the floor next to you: a jolt, and its name in blood.

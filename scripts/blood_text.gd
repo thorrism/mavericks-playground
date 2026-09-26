@@ -2,7 +2,7 @@ extends Control
 ## Huge letters that slam onto the screen one by one and drip blood, when something sees you.
 ## Call scare("RUN") and it does the rest.
 
-@export var font_size := 150
+@export var font_size := 128
 @export var color := Color(0.55, 0.02, 0.02)
 @export var shadow_color := Color(0.0, 0.0, 0.0, 0.85)
 
@@ -78,7 +78,7 @@ func _draw() -> void:
 		var t: float = _age - l.delay
 		if t < 0.0:
 			continue
-		var punch := 1.0 + maxf(0.0, 0.3 - t * 2.5) * 2.5   # slams in big, then settles
+		var punch := 1.0 + maxf(0.0, 0.3 - t * 2.5) * 2.0   # slams in big, then settles
 		draw_set_transform(Vector2(l.x, l.y), l.rot, Vector2.ONE * punch)
 		draw_char_outline(_font, Vector2(6, 8), l.ch, l.size, 10, sc)
 		draw_char(_font, Vector2(6, 8), l.ch, l.size, sc)
