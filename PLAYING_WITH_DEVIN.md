@@ -15,7 +15,7 @@ Eight chapters, all in `scripts/chapters.gd`, each one a little drawing like thi
 ##########X#########      #  wall        T  toy        X  golden exit door
 #..................#      W  low wall (drone only)     =  fence (jump over)   ^  tree (outside) / pillar
 #.T..J......L..M.T.#      L  flickering lamp            1 2 3 4 doors   a b c d buttons  (a opens 1, b opens 2 ...)
-#..S...........Z...#      M  Banbo (tall teal)   J  Jumbo (big green)   O  Opi the bird (not on the map right now)
+#..S...........Z...#      M  Banbo   J  Jumbo   N  Natchee   D  Howler   K  Skitter   G  Gloop   (one of each per chapter!)
 #H....t............#      H  cupboard to hide in (against a wall)    t  kids' table with chairs
 ####################      S  shelf / lockers / bookcase / lab tank / swing set    Z  crates / gym mats / slide
 ```
@@ -41,7 +41,9 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 - "Rename Chapter 5 to THE DUNGEON." (`name` / `tagline` in chapters.gd)
 - "Unlock all the chapters." (`unlocked = 7` in settings.gd, or escape them)
 - "Add another bird next to the start." (add an `O`; `M` and `J` for the other two)
-- "Make the tall one pink." / "Make the bird's legs purple." (`color` per kind in `_apply_kind`, monster.gd)
+- "Make the tall one pink." / "Make Natchee's petals blue." (`color` per kind in `_apply_kind`, monster.gd)
+- "Put Natchee in chapter 1 too." (add an `N` to that chapter's map - only one of each creature per chapter)
+- "Make a new creature from my drawing." (a new `Kind` + a `_build_...` in monster.gd, a letter in kinder.gd's `MONSTER_LETTERS`)
 - "Make the monsters slower / faster / easier." (`chase_speed`, `see_distance`, `lose_after` in monster.gd)
 - "Give me more time to dodge" / "make Jumbo's swing reach further." (`windup_time`, `commit_before`, `swing_width`, `strike_range` in monster.gd's Attack group)
 - "Make EASY even easier" / "add an IMPOSSIBLE mode." (`TUNING`, `NAMES`, `BLURBS` in settings.gd)

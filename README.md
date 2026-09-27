@@ -41,9 +41,13 @@ chapter (`monster_scale` / `hunt` in the same file); later rooms have higher cei
   counted down on screen), so you have to run for it - or press the button again. A door never shuts
   on anyone standing in it.
 - **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
-- Two **monsters** (map letters `M` = Banbo, a tall teal grinning thing with a bow tie, and `J` = Jumbo,
-  a huge green brute; `O` adds a lanky yellow bird if you want one) - one per room. They really walk
-  (knees bend, feet plant, they lean into a run), know the way around walls, run to where they last
+- The **creatures** - never two of the same kind in a chapter, and you meet new ones as you go:
+  `M` Banbo (tall teal grin, bow tie) and `J` Jumbo (huge green brute) from chapter 1;
+  `N` Natchee (a one-eyed flower that stands rooted, then crawls at you on five roots) from chapter 3;
+  `D` Howler (low, fast, four legs) from chapter 4; `K` Skitter (six legs, a face full of eyes) from
+  chapter 6; `G` Gloop (what climbed out of the lab tanks - it slides) in chapter 8. `O` adds a lanky
+  yellow bird if you want one. They really move the way they're built (knees bend and feet plant,
+  roots plant and pull, paws pad, a blob squashes and stretches), know the way around walls, run to where they last
   saw you and search there, and stop to look around between wanders - but you are a bit faster, and **a monster never leaves its own room**:
   get through a doorway and it gives up. They also leave you alone for the first few seconds after a (re)start.
 - **Seen**: dripping blood letters (`BANBO SEES YOU`), a scream, red screen edges, shaking, your
@@ -105,7 +109,7 @@ scripts/chapters.gd     THE 8 CHAPTERS: a text map + name + timed doors + creatu
 scripts/kinder.gd       builds the chapter: colours/themes per room, scary knobs, walls/doors/buttons/toys/monsters/lamps
 scripts/settings.gd     difficulty, which chapter you're on, what's unlocked, best times (saved between runs)
 tools/check_maps.py     checks every chapter map is solvable (run by `make test`)
-scripts/monster.gd      the three monsters: behaviour knobs at the top, brain (A* paths, seeing/hearing), then the models
+scripts/monster.gd      the creatures: behaviour knobs at the top, brain (A* paths, seeing/hearing), then a model per kind
 scripts/lamp.gd         a flickering ceiling lamp (`L` on the map)
 scripts/spooky_audio.gd hum / music box / panic music / your footsteps / chime / scream
 scripts/sfx.gd          every sound effect, generated from maths (add a new one here)

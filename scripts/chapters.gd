@@ -7,7 +7,12 @@ class_name Chapters
 ##   T  toy                 L  lamp              H  cupboard to hide in    t  table
 ##   S  shelf (lockers / bookcase / lab tank / swings outside)   Z  crates (slide outside)
 ##   ^  pillar (a tree outside)
-##   M  the tall one        J  the giant         (bigger every chapter - see "monster_scale")
+##   The creatures (bigger every chapter - see "monster_scale"). Never two of the same kind in
+##   one chapter: each is a character, and you meet a new one every couple of chapters.
+##   M  Banbo, the tall one (ch 1)     J  Jumbo, the giant (ch 1)
+##   N  Natchee, the one-eyed flower that crawls on its roots (from chapter 3)
+##   D  Howler, the four-legged one (from chapter 4)   K  Skitter, six legs (from chapter 6)
+##   G  Gloop, what came out of the lab tanks (chapter 8)
 ##   1-9 doors, a-i buttons: a opens 1, b opens 2 ... A letter can appear more than once:
 ##   both buttons open the same door (handy for a timed door you need to open from the far side).
 ##
@@ -84,7 +89,7 @@ const CHAPTERS: Array[Dictionary] = [
 	},
 	{
 		"name": "LIBRARY",
-		"tagline": "keep quiet in the stacks.  the doors here don't wait for you.",
+		"tagline": "keep quiet in the stacks.  something has taken root in the reading room.",
 		"theme": "library",
 		"timed": {"3": 25.0},
 		"monster_scale": 1.1,
@@ -98,7 +103,7 @@ const CHAPTERS: Array[Dictionary] = [
 			"#....SS..#......c....#",
 			"#tt..SS..#.....t.....#",
 			"#........3...........#",
-			"#......t.#.T.........#",
+			"#..N...t.#.T.........#",
 			"#.T......#......L...H#",
 			"#H.......#...........#",
 			"##########2###########",
@@ -118,7 +123,7 @@ const CHAPTERS: Array[Dictionary] = [
 	},
 	{
 		"name": "LUNCHROOM",
-		"tagline": "long tables, a dark kitchen.  three of them now.",
+		"tagline": "long tables, a dark kitchen.  three of them now - and one of them runs.",
 		"theme": "lunchroom",
 		"timed": {"2": 20.0},
 		"monster_scale": 1.15,
@@ -135,7 +140,7 @@ const CHAPTERS: Array[Dictionary] = [
 			"#...T..H.#.b.......H.#",
 			"##############2#######",
 			"#........#...........#",
-			"#..M.....#...........#",
+			"#..D.....#...........#",
 			"#HT......#.....===...#",
 			"#........#.....=a=...#",
 			"#..L.....1.....===...#",
@@ -163,7 +168,7 @@ const CHAPTERS: Array[Dictionary] = [
 			"#..............#......H#",
 			"#.T..=====.....#..ZZ...#",
 			"#....L.........#......T#",
-			"#...M..........#..M....#",
+			"#...N..........#..D....#",
 			"#..=======.....3.d.c...#",
 			"#..............#..ZZ...#",
 			"#.....L..WWW...#...T...#",
@@ -178,7 +183,7 @@ const CHAPTERS: Array[Dictionary] = [
 	},
 	{
 		"name": "ART ROOM",
-		"tagline": "paint on the walls.  not all of it is paint.",
+		"tagline": "paint on the walls.  not all of it is paint.  mind the webs.",
 		"theme": "art",
 		"timed": {"3": 15.0, "4": 15.0},
 		"monster_scale": 1.25,
@@ -194,9 +199,9 @@ const CHAPTERS: Array[Dictionary] = [
 			"##########4#############",
 			"#......#.......#.......#",
 			"#..T...#.......#..T....#",
-			"#.M..L.#.......#...L...#",
+			"#.N..L.#.......#...L...#",
 			"#......#..===..#.ZZ....#",
-			"#WWW...#..=a=..#.ZZ.M..#",
+			"#WWW...#..=a=..#.ZZ.K..#",
 			"#WcW...1..===..3......H#",
 			"#WWW...#.......#.......#",
 			"#......#...P...#..d....#",
@@ -220,7 +225,7 @@ const CHAPTERS: Array[Dictionary] = [
 			"#.....^....#.....T.....#",
 			"#.T.......^#...WWWWW...#",
 			"#..SS......#...W...W..^#",
-			"#..SS..M...#...W.c.W...#",
+			"#..SS..K...#...W.c.W...#",
 			"#..........3...WWWWW...#",
 			"#^.....T...#.......J...#",
 			"#.....c....#..ZZ.......#",
@@ -233,7 +238,7 @@ const CHAPTERS: Array[Dictionary] = [
 			"############...........#",
 			"#....L.....#..T........#",
 			"#.....===..#...WWW.....#",
-			"#..^..=a=..1...WbW..M..#",
+			"#..^..=a=..1...WbW..D..#",
 			"#.....===..#...WWW.....#",
 			"#.P........#........T..#",
 			"#....H..T..#..H........#",
@@ -242,7 +247,7 @@ const CHAPTERS: Array[Dictionary] = [
 	},
 	{
 		"name": "THE ABYSS",
-		"tagline": "the science lab.  this is where it all went wrong.",
+		"tagline": "the science lab.  this is where it all went wrong.  they're ALL here.",
 		"theme": "lab",
 		"timed": {"2": 12.0, "3": 12.0, "4": 12.0},
 		"monster_scale": 1.9,
@@ -251,17 +256,17 @@ const CHAPTERS: Array[Dictionary] = [
 		"map": [
 			"#####X##################",
 			"#H....T...d#..T.......c#",
-			"#..L.......#.....S.S...#",
+			"#..L...M...#.....S.S...#",
 			"#....T.....#..J........#",
-			"#####4######..M........#",
+			"#####4######..G........#",
 			"#..........#....S.S..b.#",
 			"#..S.WWW...3....c.....T#",
 			"#....WdW...######2######",
 			"#....WWW...#......S....#",
-			"#J...c.....#..T........#",
+			"#K...c.....#..T........#",
 			"#..........#..........H#",
 			"#..T......H#..ZZ.......#",
-			"#..........#..ZZ....J..#",
+			"#..........#..ZZ....N..#",
 			"#.T..L.....#....WWW....#",
 			"#..........#....WbW....#",
 			"############....WWW....#",

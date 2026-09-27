@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Sanity-check every chapter map in scripts/chapters.gd without opening Godot.
 
-Rectangular, one P, one X, every door has a button, monsters never in the start room,
-and every toy / button / the exit can actually be reached (walking + jumping fences, drone
-over low walls, doors opening once a button for them is reachable)."""
+Rectangular, one P, one X, every door has a button, monsters never in the start room, never
+two of the same kind of creature in one chapter (each is a character), and every toy / button /
+the exit can actually be reached (walking + jumping fences, drone over low walls, doors opening
+once a button for them is reachable)."""
 import re
 import sys
 from pathlib import Path
@@ -13,6 +14,8 @@ WALL = "#"
 BLOCKS_ALL = set("#SZ^t")          # nobody walks through these (tables: play it safe)
 BLOCKS_ROBOT = BLOCKS_ALL | {"W"}   # the drone flies over low walls
 NEIGHBOURS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+# map letter -> creature (same order as Monster.Kind / kinder.gd MONSTER_LETTERS)
+MONSTERS = {"M": "Banbo", "J": "Jumbo", "O": "Opi", "N": "Natchee", "D": "Howler", "K": "Skitter", "G": "Gloop"}
 
 
 def maps():
@@ -107,9 +110,13 @@ def check(name, grid):
 
     ids = rooms(grid)
     start = cells["P"][0]
-    for m in cells.get("M", []) + cells.get("J", []) + cells.get("O", []):
-        if ids.get(m) == ids.get(start):
-            problems.append(f"monster at {m} shares the start room")
+    for letter, who in MONSTERS.items():
+        spots = cells.get(letter, [])
+        if len(spots) > 1:
+            problems.append(f"{who} ({letter}) appears {len(spots)} times - one of each creature per chapter")
+        for m in spots:
+            if ids.get(m) == ids.get(start):
+                problems.append(f"{who} at {m} shares the start room")
 
     # what can you reach? doors open once one of their buttons is reachable (robot or drone)
     open_doors = set()
@@ -145,10 +152,10 @@ def main():
     for i, (name, grid) in enumerate(maps()):
         problems = check(name, grid)
         toys = sum(row.count("T") for row in grid)
-        monsters = sum(row.count(ch) for row in grid for ch in "MJO")
+        cast = [who for letter, who in MONSTERS.items() if any(letter in row for row in grid)]
         doors = sorted({ch for row in grid for ch in row if ch.isdigit()})
         status = "ok " if not problems else "BAD"
-        print(f"{status} chapter {i + 1} {name}: {len(grid[0])}x{len(grid)}, {toys} toys, {monsters} monsters, doors {''.join(doors)}")
+        print(f"{status} chapter {i + 1} {name}: {len(grid[0])}x{len(grid)}, {toys} toys, doors {''.join(doors)}, creatures: {', '.join(cast)}")
         for p in problems:
             print("     -", p)
             bad += 1
