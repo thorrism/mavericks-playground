@@ -120,8 +120,7 @@ func _test_kinder() -> void:
 	var doors := get_nodes_in_group("door")
 	var buttons := get_nodes_in_group("button")
 	_check(toys.size() == _count_in_map("T"), "%d toys placed from the map" % toys.size())
-	var monster_letters := _count_in_map("M") + _count_in_map("J") + _count_in_map("O")
-	_check(monsters.size() == monster_letters, "%d monsters placed from the map" % monsters.size())
+	_check(monsters.size() == _monster_letters(0), "%d monsters placed from the map" % monsters.size())
 	var kinds := {}
 	for m in monsters:
 		kinds[m.kind] = true
@@ -152,6 +151,10 @@ func _test_kinder() -> void:
 	_check(Sfx.get_sound("click").data.size() > 1000 and Sfx.get_sound("door").data.size() > 1000
 		and Sfx.get_sound("snarl").data.size() > 1000 and Sfx.get_sound("whoosh").data.size() > 1000,
 		"button, door, snarl and whoosh sounds have data")
+	var new_sounds_ok := true
+	for s in ["rustle", "pad", "squelch", "hiss", "howl", "chitter", "gurgle"]:
+		new_sounds_ok = new_sounds_ok and Sfx.get_sound(s).data.size() > 1000
+	_check(new_sounds_ok, "the new creatures' footsteps and voices have data")
 	_check(get_nodes_in_group("monster").size() == monsters.size(), "monsters registered")
 	var labels := world.find_children("*", "Label3D", true, false)
 	_check(labels.size() >= 3, "%d words scrawled on the walls" % labels.size())
@@ -561,6 +564,42 @@ func _test_menus(level: Node3D) -> Node:
 	await process_frame
 	_check(menu.mode == menu.Mode.HIDDEN and not paused, "RESUME unfreezes the game")
 
+	# Esc, Down (highlight RESTART), Enter: the real keyboard route. Enter must fire the
+	# highlighted button, not RESUME.
+	menu.show_pause()
+	await process_frame
+	_check(menu._play.has_focus(), "pause menu opens with RESUME highlighted")
+	_press_key(KEY_DOWN)
+	await process_frame
+	_check(menu._restart.has_focus(), "Down highlights RESTART")
+	var old_level := level
+	_press_key(KEY_ENTER)
+	await _settle(5)
+	var restarted: Node = null
+	for child in root.get_children():
+		if child.has_method("find_path") and child != old_level:
+			restarted = child
+	_check(restarted != null and (not is_instance_valid(old_level) or old_level.is_queued_for_deletion()),
+		"Enter on RESTART tears the run down and builds a fresh level")
+	if restarted == null:
+		return level
+	level = restarted as Node3D
+	menu = level.get_node("Menu")
+	hud = level.get_node("HUD")
+	await process_frame
+	_check(menu.mode == menu.Mode.HIDDEN and not paused and level._playing and hud.ticking and hud.elapsed < 1.0,
+		"...straight back into the game: unfrozen, clock restarted (%.1fs), no title screen" % hud.elapsed)
+
+	# Enter on the title screen must never quit the game: Up/Down change chapter there, not the highlight
+	menu.show_title()
+	await process_frame
+	_press_key(KEY_DOWN)
+	await process_frame
+	_check(menu._play.has_focus() and not menu._quit.has_focus(), "title screen: Down doesn't move the highlight onto QUIT")
+	settings.set_chapter(level.chapter)
+	menu._on_play()
+	await process_frame
+
 	# R is not a restart key any more (RESTART is only in the pause menu)
 	var tries_before: int = settings.attempts
 	Input.action_press("restart")
@@ -595,6 +634,24 @@ func _test_menus(level: Node3D) -> Node:
 	return after_quit
 
 
+## A real key press + release, routed through the window like a keyboard would be.
+func _press_key(keycode: Key) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventKey.new()
+		ev.keycode = keycode
+		ev.physical_keycode = keycode
+		ev.pressed = pressed
+		root.push_input(ev)
+
+
+## How many creature letters (any kind) a chapter's map has.
+func _monster_letters(chapter: int) -> int:
+	var n := 0
+	for ch in "MJONDKG":
+		n += _count_in_map(ch, chapter)
+	return n
+
+
 func _count_in_map(ch: String, chapter := 0) -> int:
 	var n := 0
 	for row: String in Chapters.get_chapter(chapter)["map"]:
@@ -605,7 +662,7 @@ func _count_in_map(ch: String, chapter := 0) -> int:
 # ---------------------------------------------------------------------------
 # Chapters 1-8: maps, unlocking, escalation, playground night, the lab
 # ---------------------------------------------------------------------------
-const SYMBOLS := "#W.PTMJOL=XH123456789abcdefghiSZ^t"
+const SYMBOLS := "#W.PTMJONDKGL=XH123456789abcdefghiSZ^t"
 
 func _test_chapters() -> void:
 	print("Smoke test: chapters 1-8")
@@ -671,6 +728,7 @@ func _test_chapters() -> void:
 	# build every chapter for real
 	settings.unlocked = 7
 	var chapter1_top := 0.0
+	var seen_kinds := {}   # kind -> first chapter it appears in
 	for i in Chapters.count():
 		settings.chapter = i
 		var def: Dictionary = Chapters.get_chapter(i)
@@ -687,8 +745,42 @@ func _test_chapters() -> void:
 		var title: String = Chapters.title(i)
 		_check(level.chapter == i and level.hud.subtitle == title.to_lower(), "%s: built, HUD says '%s'" % [def["name"], level.hud.subtitle])
 		_check(toys.size() == _count_in_map("T", i) and toys.size() == Chapters.toy_count(i), "%s: %d toys from the map" % [def["name"], toys.size()])
-		var letters := _count_in_map("M", i) + _count_in_map("J", i) + _count_in_map("O", i)
-		_check(monsters.size() == letters and monsters.size() >= 2, "%s: %d creatures from the map" % [def["name"], monsters.size()])
+		_check(monsters.size() == _monster_letters(i) and monsters.size() >= 2, "%s: %d creatures from the map" % [def["name"], monsters.size()])
+		# the cast: never two of the same character in a chapter, and new ones turn up as you go
+		var cast := {}
+		var cast_names: Array[String] = []
+		for m in monsters:
+			cast[m.kind] = m
+			cast_names.append(m.kind_name)
+		_check(cast.size() == monsters.size(), "%s: one of each - %s" % [def["name"], ", ".join(cast_names)])
+		for k in cast:
+			if not seen_kinds.has(k):
+				seen_kinds[k] = i
+		if i == 2:
+			_check(cast.has(3) and seen_kinds.get(3, -1) == 2, "LIBRARY: Natchee is introduced here (chapter 3)")
+			if cast.has(3):
+				var natchee: CharacterBody3D = cast[3]
+				_check(natchee.kind_name == "Natchee", "...called Natchee")
+				_check(natchee._eye != null and natchee._petals.size() >= 6 and natchee._left_leg == null and natchee._limbs.size() == 5,
+					"...one eye, %d petals, no legs, %d roots" % [natchee._petals.size(), natchee._limbs.size()])
+				var rest: Array[float] = []
+				for root in natchee._limbs:
+					rest.append(root.rotation.x)
+				natchee._stride_phase = 1.2
+				natchee._animate_limbs(0.016, true, 1.0)
+				var moved := 0
+				var together := true
+				for r in natchee._limbs.size():
+					if absf(natchee._limbs[r].rotation.x - rest[r]) > 0.05:
+						moved += 1
+					together = together and is_equal_approx(natchee._limbs[r].rotation.x - rest[r], natchee._limbs[0].rotation.x - rest[0])
+				_check(moved >= 3 and not together, "...and it crawls: %d of 5 roots lift and reach, not all at once" % moved)
+				_check(natchee._idle_range.x >= 4.0 and natchee.see_angle >= 140.0, "...stays rooted a long time between moves, and that eye sees wide")
+		if i == 7:
+			_check(cast.size() >= 5 and cast.has(6), "THE ABYSS: %d different creatures, Gloop among them" % cast.size())
+		if i == Chapters.count() - 1:
+			_check(seen_kinds.size() >= 6 and seen_kinds.get(4, 9) > seen_kinds.get(0, 9) and seen_kinds.get(5, 9) > seen_kinds.get(4, 9) and seen_kinds.get(6, 9) > seen_kinds.get(5, 9),
+				"%d creature kinds in all, introduced in order: Howler ch %d, Skitter ch %d, Gloop ch %d" % [seen_kinds.size(), seen_kinds.get(4, 0) + 1, seen_kinds.get(5, 0) + 1, seen_kinds.get(6, 0) + 1])
 		var door_letters := 0
 		var button_letters := 0
 		for row: String in def["map"]:
@@ -708,13 +800,14 @@ func _test_chapters() -> void:
 		_check(robot.is_on_floor() and robot.global_position.y > -0.5, "%s: you're standing on the floor" % def["name"])
 
 		# size: chapter 1 is the baseline, everything else is at least as big, indoors under the ceiling
-		var top: float = monsters[0].model_top()
-		if i == 0:
-			chapter1_top = top
+		var top := 0.0   # the tallest creature in the chapter (Howler and Skitter are low)
 		var ceiling_ok := true
 		for m in monsters:
+			top = maxf(top, m.model_top())
 			if not level.outdoors:
 				ceiling_ok = ceiling_ok and m.model_top() < level.wall_height - 0.1
+		if i == 0:
+			chapter1_top = top
 		_check(ceiling_ok and top >= chapter1_top - 0.01, "%s: creature top %.2f m (ceiling %s)" % [def["name"], top, "none" if level.outdoors else "%.1f m" % level.wall_height])
 		_check(is_equal_approx(monsters[0].size, def["monster_scale"]), "%s: creatures are x%.2f" % [def["name"], monsters[0].size])
 

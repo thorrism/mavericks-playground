@@ -1,8 +1,15 @@
 extends CharacterBody3D
-## The things that live in the kindergarten. Three kinds, all built from shapes in code:
-##   TALL_ONE  a tall teal grinning thing with a red bow tie          (map letter M)
-##   GIANT     a huge green brute with tiny eyes and fists like rocks  (map letter J)
-##   BIRD      a lanky yellow bird with long orange legs and a beak    (map letter O)
+## The things that live in the school. Every kind is built from shapes in code:
+##   TALL_ONE  Banbo    a tall teal grinning thing with a red bow tie              (map letter M)
+##   GIANT     Jumbo    a huge green brute with tiny eyes and fists like rocks     (map letter J)
+##   BIRD      Opi      a lanky yellow bird with long orange legs and a beak       (map letter O, retired)
+##   PLANT     Natchee  a flower with ONE big eye, petals like wings, leaf arms and
+##                      five roots it crawls on - it stands rooted, then scuttles   (map letter N, chapter 3+)
+##   HOUND     Howler   a low, fast, four-legged thing with ears and a lot of teeth (map letter D, chapter 4+)
+##   SPIDER    Skitter  a wide black thing on six legs with a face full of eyes     (map letter K, chapter 6+)
+##   BLOB      Gloop    a glowing green heap from the lab tanks that slides after you (map letter G, chapter 8)
+## A chapter never has two of the same kind: each one is a character, and you meet more of them
+## as the chapters go on (see chapters.gd).
 ## They wander their room. If one SEES you (in front of it, nothing in the way) or HEARS you
 ## walking close by, it hunts you: it knows the way around walls, goes to where it last saw
 ## you, searches around there, and only gives up after a while. But each one is tied to the
@@ -14,8 +21,15 @@ extends CharacterBody3D
 ## along a straight lane in front of it. Get out of that lane before the arms land and it misses
 ## (and is stuck for a moment); stand there, or step in late, and it lands.
 
-enum Kind { TALL_ONE, GIANT, BIRD }
+enum Kind { TALL_ONE, GIANT, BIRD, PLANT, HOUND, SPIDER, BLOB }
 enum Attack { NONE, WINDUP, STRIKE, RECOVER }
+## How it gets about - drives the walk animation (see _animate).
+##   LEGS       two legs with knees (Banbo, Jumbo, Opi)
+##   ROOTS      no legs: it drags itself along on its roots, heaving with every pull (Natchee)
+##   QUAD       four legs, the front pair are its "arms" (Howler)
+##   MANY_LEGS  six legs that skitter in two sets of three (Skitter)
+##   SLIDE      no legs at all: it squashes and stretches its way along (Gloop)
+enum Gait { LEGS, ROOTS, QUAD, MANY_LEGS, SLIDE }
 
 @export var kind := Kind.TALL_ONE
 
@@ -94,22 +108,33 @@ var _strike_from := Vector3.ZERO   # where it stood when the swing started (the 
 
 var _visual: Node3D
 var _head: Node3D
-var _left_leg: Node3D
+var _left_leg: Node3D          # null for kinds without legs (roots / a blob)
 var _right_leg: Node3D
 var _left_knee: Node3D
 var _right_knee: Node3D
-var _left_arm: Node3D
+var _left_arm: Node3D          # arms, leaf arms, front legs, pedipalps, tendrils: whatever it raises to strike
 var _right_arm: Node3D
+var _fore_knees: Array[Node3D] = []   # the front legs' knees (four-legged kinds)
+var _limbs: Array[Node3D] = []        # roots / the six legs: pivots animated in _animate_limbs
+var _limb_phase: Array[float] = []    # ...each one a different way along the stride
+var _petals: Array[Node3D] = []       # Natchee's petals: they flare when it strikes
+var _eye: Node3D                      # a single big eye (Natchee): it widens when it sees you
+var _body: Node3D                     # the blob: squashes and stretches as it moves
 var _jaw: Node3D
 var _audio: AudioStreamPlayer3D
 
 # per-kind looks/sounds
+var _gait := Gait.LEGS
 var _height := 3.3
 var _leg_h := 1.3
 var _step_len := 1.4       # metres one foot travels per step (sets how fast the legs go)
 var _swing_amp := 0.55     # radians the hips swing at full speed
 var _knee_amp := 0.9       # how much the knee bends when a leg swings forward
 var _arm_swing := 0.6      # arms swing this much of the leg swing
+var _arm_hang := 0.1       # where the arms rest (radians on x) when it's just wandering
+var _arm_reach := -0.5     # ...and when it's hunting you (arms reach forward)
+var _arm_splay := 0.0      # arms held out to the sides this much (leaf arms, tendrils)
+var _idle_range := Vector2(1.5, 4.5)   # seconds it stands still between wanders (a plant: much longer)
 var _step_sound := "thud"
 var _voice_sound := "giggle"
 var _attack_sound := "snarl"
@@ -268,13 +293,150 @@ func _apply_kind() -> void:
 			_voice_sound = "caw"
 			_attack_sound = "caw"
 			_step_db = -3.0
+			_arm_hang = 0.6   # folded wings
+			_arm_reach = 0.6
+		Kind.PLANT:
+			# Natchee. A flower shouldn't be able to walk - so it doesn't: it sits rooted for a long
+			# time, swaying, and its one eye sees very wide and very far. Then it drags itself at
+			# you on its roots, faster than looks possible, and whips you with its leaves.
+			kind_name = "Natchee"
+			color = Color("e8c31c")
+			_gait = Gait.ROOTS
+			_height = 3.2
+			wander_speed = 1.1
+			chase_speed = 4.5
+			accel = 8.0          # heavy, drags
+			turn_rate = 3.0
+			see_distance = 10.0  # one enormous eye
+			see_angle = 150.0
+			hear_distance = 4.0  # its roots feel you walking
+			lose_after = 2.0
+			search_time = 5.0
+			strike_range = 3.0
+			windup_time = 0.55
+			strike_time = 0.2
+			recover_time = 1.0
+			lunge = 1.6
+			track_rate = 3.5
+			commit_before = 0.12
+			swing_width = 1.3    # two big leaves
+			_step_len = 0.8      # lots of little root-pulls
+			_idle_range = Vector2(4.0, 9.0)   # rooted: it stands still a long time, swaying
+			_arm_hang = 0.2
+			_arm_reach = -0.6
+			_arm_splay = 0.9
+			_step_sound = "rustle"
+			_voice_sound = "hiss"
+			_attack_sound = "hiss"
+			_step_db = -3.0
+		Kind.HOUND:
+			# Howler. Low and quick on four legs, the best ears in the school. Rears up on its
+			# hind legs before it pounces.
+			kind_name = "Howler"
+			color = Color("4a3a30")
+			_gait = Gait.QUAD
+			_height = 1.7
+			wander_speed = 2.2
+			chase_speed = 5.4    # the fastest of them (you run at 7)
+			accel = 18.0
+			turn_rate = 6.5
+			see_distance = 8.0
+			see_angle = 90.0     # eyes point forward...
+			hear_distance = 6.0  # ...but those ears
+			lose_after = 2.5
+			search_time = 5.0    # sniffs about
+			strike_range = 2.6
+			windup_time = 0.45
+			strike_time = 0.16
+			recover_time = 0.9
+			lunge = 2.0          # the pounce
+			track_rate = 5.0
+			commit_before = 0.1
+			swing_width = 0.9
+			_step_len = 1.1
+			_swing_amp = 0.6
+			_knee_amp = 0.6
+			_arm_swing = 1.0     # front legs swing as far as the back ones (a trot)
+			_arm_hang = 0.0
+			_arm_reach = 0.0
+			_step_sound = "pad"
+			_voice_sound = "howl"
+			_attack_sound = "snarl"
+			_step_db = -2.0
+		Kind.SPIDER:
+			# Skitter. Wide and low, six legs, eyes all round its head so there's almost no
+			# sneaking past. Darts. Rears up on its back legs to strike.
+			kind_name = "Skitter"
+			color = Color("2a2230")
+			_gait = Gait.MANY_LEGS
+			_height = 1.5
+			wander_speed = 1.6
+			chase_speed = 5.0
+			accel = 20.0
+			turn_rate = 7.0
+			see_distance = 7.0
+			see_angle = 200.0
+			hear_distance = 5.0
+			lose_after = 1.5
+			search_time = 4.0
+			strike_range = 2.6
+			windup_time = 0.45
+			strike_time = 0.15
+			recover_time = 0.8
+			lunge = 1.8
+			track_rate = 5.0
+			commit_before = 0.1
+			swing_width = 1.2
+			_step_len = 0.7
+			_arm_hang = 0.3
+			_arm_reach = -0.3
+			_arm_splay = 0.5
+			_step_sound = "clack"
+			_voice_sound = "chitter"
+			_attack_sound = "chitter"
+			_step_db = -4.0
+		Kind.BLOB:
+			# Gloop. What was left in the tanks. Slow, but it sees out of every side of itself
+			# and it does not give up. Its tendrils come down like wet ropes.
+			kind_name = "Gloop"
+			color = Color("5ad040")
+			_gait = Gait.SLIDE
+			_height = 1.9
+			wander_speed = 1.0
+			chase_speed = 3.8    # the slowest...
+			accel = 6.0
+			turn_rate = 3.0
+			see_distance = 8.0
+			see_angle = 360.0    # ...but eyes all over
+			hear_distance = 3.0
+			lose_after = 3.0     # and it keeps coming
+			search_time = 6.0
+			strike_range = 3.2
+			windup_time = 0.7
+			strike_time = 0.22
+			recover_time = 1.3
+			lunge = 2.4
+			track_rate = 3.0
+			commit_before = 0.15
+			swing_width = 1.6
+			_step_len = 1.6
+			_arm_hang = 0.1
+			_arm_reach = -0.7
+			_arm_splay = 0.6
+			_step_sound = "squelch"
+			_voice_sound = "gurgle"
+			_attack_sound = "gurgle"
+			_step_db = 2.0
 
 
 func _add_collision() -> void:
 	var shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
 	var s := _visual.scale.y / _fit_scale   # how much bigger than the normal, ceiling-fitted model
-	capsule.radius = (0.8 if kind == Kind.GIANT else 0.45) * s
+	var radius := 0.45
+	if kind == Kind.GIANT or kind == Kind.BLOB or kind == Kind.SPIDER:
+		radius = 0.8
+	capsule.radius = radius * s
 	capsule.height = 2.2 * s
 	shape.shape = capsule
 	shape.position.y = 1.1 * s
@@ -400,7 +562,7 @@ func _physics_process(delta: float) -> void:
 		elif _retarget_in <= 0.0:
 			_pick_wander_target()
 		elif _flat_distance(_target) < 0.6:
-			_idle_for = randf_range(1.5, 4.5)
+			_idle_for = randf_range(_idle_range.x, _idle_range.y)
 			_target = global_position
 
 	var speed := chase_speed if chasing else wander_speed
@@ -593,33 +755,64 @@ func _animate(delta: float) -> void:
 	_arm_pose = move_toward(_arm_pose, pose_target, pose_rate * delta)
 	_lean = lerpf(_lean, lean_target, minf(1.0, (25.0 if attack == Attack.STRIKE else 6.0) * delta))
 
-	# legs
-	var l_leg := lerpf(swing, -0.35, _arm_pose)          # braced stance while attacking
-	var r_leg := lerpf(-swing, 0.25, _arm_pose)
 	var settle := 1.0 if walking else minf(1.0, 8.0 * delta)
-	_left_leg.rotation.x = lerpf(_left_leg.rotation.x, l_leg, settle)
-	_right_leg.rotation.x = lerpf(_right_leg.rotation.x, r_leg, settle)
-	if _left_knee:
-		_left_knee.rotation.x = lerpf(_left_knee.rotation.x, lerpf(l_knee, 0.35, _arm_pose), settle)
-		_right_knee.rotation.x = lerpf(_right_knee.rotation.x, lerpf(r_knee, 0.35, _arm_pose), settle)
+	var stride_on := 1.0 if walking else 0.0
 
-	# body: sink with the stride, sway to the standing leg, lean into the run / the swing
-	var sink := -_leg_h * (1.0 - cos(swing)) - 0.12 * _arm_pose
+	# legs (kinds that have them)
+	if _left_leg:
+		var l_leg := lerpf(swing, -0.35, _arm_pose)          # braced stance while attacking
+		var r_leg := lerpf(-swing, 0.25, _arm_pose)
+		_left_leg.rotation.x = lerpf(_left_leg.rotation.x, l_leg, settle)
+		_right_leg.rotation.x = lerpf(_right_leg.rotation.x, r_leg, settle)
+		if _left_knee:
+			_left_knee.rotation.x = lerpf(_left_knee.rotation.x, lerpf(l_knee, 0.35, _arm_pose), settle)
+			_right_knee.rotation.x = lerpf(_right_knee.rotation.x, lerpf(r_knee, 0.35, _arm_pose), settle)
+		if _fore_knees.size() == 2:   # front legs: the opposite knee bends (diagonal pairs move together)
+			_fore_knees[0].rotation.x = lerpf(_fore_knees[0].rotation.x, lerpf(r_knee, 0.35, _arm_pose), settle)
+			_fore_knees[1].rotation.x = lerpf(_fore_knees[1].rotation.x, lerpf(l_knee, 0.35, _arm_pose), settle)
+
+	# body: lean into the run / the swing, and move the way its gait moves
+	var sink := -0.12 * _arm_pose
+	var sway := sin(_stride_phase) * 0.06 * stride_on
+	match _gait:
+		Gait.LEGS, Gait.QUAD:
+			# sink with the stride so the standing foot stays planted, sway to the standing leg
+			sink -= _leg_h * (1.0 - cos(swing))
+		Gait.ROOTS:
+			# heaves up as the roots pull, rolls heavily side to side, sways in the breeze when still
+			sink += absf(sin(_stride_phase)) * 0.12 * stride_on
+			sway = sin(_stride_phase) * 0.12 * stride_on + sin(_time * 1.3) * 0.04 * (1.0 - stride_on)
+		Gait.MANY_LEGS:
+			sink += absf(sin(_stride_phase * 2.0)) * 0.04 * stride_on
+			sway = sin(_stride_phase) * 0.03 * stride_on
+		Gait.SLIDE:
+			# a heap that flows: it squashes as it lands and stretches as it reaches
+			var squash := sin(_stride_phase * 2.0) * 0.1 * stride_on + sin(_time * 2.1) * 0.03
+			if _body:
+				_body.scale = Vector3(1.0 + squash * 0.6, 1.0 - squash, 1.0 + squash * 0.6)
+			sway = sin(_stride_phase) * 0.04 * stride_on
 	_visual.position.y = lerpf(_visual.position.y, sink, settle)
-	_visual.rotation.z = lerpf(_visual.rotation.z, sin(_stride_phase) * 0.06 * (1.0 if walking else 0.0), settle)
-	_visual.rotation.x = _lean + sin(_stride_phase * 2.0) * 0.02 * (1.0 if walking else 0.0)
+	_visual.rotation.z = lerpf(_visual.rotation.z, sway, settle)
+	_visual.rotation.x = _lean + sin(_stride_phase * 2.0) * 0.02 * stride_on
+	_animate_limbs(delta, walking, settle)
 
 	# arms: counter-swing the legs, reach forward when hunting; the attack pose overrides
-	var hang := -0.5 if chasing else 0.1
-	if kind == Kind.BIRD:
-		hang = 0.6   # folded wings
+	var hang := _arm_reach if chasing else _arm_hang
 	var l_arm := lerpf(-swing * _arm_swing + hang, _arm_target, _arm_pose)
 	var r_arm := lerpf(swing * _arm_swing + hang, _arm_target, _arm_pose)
 	var arm_settle := 1.0 if (walking or attack != Attack.NONE) else minf(1.0, 8.0 * delta)
 	_left_arm.rotation.x = lerpf(_left_arm.rotation.x, l_arm, arm_settle)
 	_right_arm.rotation.x = lerpf(_right_arm.rotation.x, r_arm, arm_settle)
-	_left_arm.rotation.z = 0.35 * _arm_pose     # hands apart when raised
-	_right_arm.rotation.z = -0.35 * _arm_pose
+	_left_arm.rotation.z = -_arm_splay + 0.35 * _arm_pose     # hands apart when raised
+	_right_arm.rotation.z = _arm_splay - 0.35 * _arm_pose
+
+	# petals flare and the eye goes wide as it winds up (Natchee)
+	var flare := 1.0 + 0.35 * _arm_pose + (0.06 * sin(_time * 9.0) if chasing else 0.03 * sin(_time * 1.1))
+	for petal in _petals:
+		petal.scale = petal.get_meta("rest", Vector3.ONE) * flare
+	if _eye:
+		var wide := 1.0 + (0.3 if chasing else 0.0) + 0.25 * _arm_pose
+		_eye.scale = Vector3(wide, wide * (0.55 if not chasing and sin(_time * 0.6) > 0.97 else 1.0), 1.0)   # ...and blinks now and then
 
 	# breathing, twitching head, working jaw; it looks up as it winds up and down as it slams
 	_head.rotation.z = sin(_time * 1.7) * 0.08 + (sin(_time * 23.0) * 0.06 if chasing else 0.0)
@@ -627,6 +820,36 @@ func _animate(delta: float) -> void:
 	if _jaw:
 		var open := (0.25 + sin(_time * 14.0) * 0.2) if chasing else absf(sin(_time * 0.7)) * 0.08
 		_jaw.rotation.x = maxf(open, 0.5 * _arm_pose)
+
+
+## Roots and the six legs: every limb goes round the same stride, each a different way along it.
+##   ROOTS      a root lifts (rotation.x back towards the trunk), reaches, plants, and drags -
+##              like a hand crawling. When it's rooted they only twitch.
+##   MANY_LEGS  legs swing forward and back (around y) and lift (around z) in two sets of three.
+func _animate_limbs(delta: float, walking: bool, settle: float) -> void:
+	if _limbs.is_empty():
+		return
+	var stride_on := 1.0 if walking else 0.0
+	for i in _limbs.size():
+		var limb := _limbs[i]
+		var ph := _stride_phase + _limb_phase[i]
+		var rest_x: float = limb.get_meta("rest_x", 0.0)
+		var side: float = limb.get_meta("side", 1.0)
+		match _gait:
+			Gait.ROOTS:
+				var lift := maxf(0.0, sin(ph)) * 0.45 * stride_on
+				var reach := cos(ph) * 0.25 * stride_on
+				var twitch := sin(_time * 2.3 + i * 1.7) * 0.04 * (1.0 - stride_on)
+				# raising a leaf arm to strike: the roots dig in and spread
+				var dig := 0.25 * _arm_pose
+				limb.rotation.x = lerpf(limb.rotation.x, rest_x - lift + reach + twitch + dig, settle)
+			Gait.MANY_LEGS:
+				var swing_y := sin(ph) * 0.35 * stride_on * side
+				var lift := maxf(0.0, cos(ph)) * 0.35 * stride_on * side
+				limb.rotation.y = lerpf(limb.rotation.y, swing_y, settle)
+				limb.rotation.z = lerpf(limb.rotation.z, rest_x + lift - 0.3 * _arm_pose * side, settle)
+			_:
+				pass
 
 
 func _footstep() -> void:
@@ -766,6 +989,14 @@ func _build() -> void:
 			_build_giant()
 		Kind.BIRD:
 			_build_bird()
+		Kind.PLANT:
+			_build_plant()
+		Kind.HOUND:
+			_build_hound()
+		Kind.SPIDER:
+			_build_spider()
+		Kind.BLOB:
+			_build_blob()
 		_:
 			_build_tall_one()
 	_fit_under_ceiling()
@@ -1103,6 +1334,446 @@ func _build_bird() -> void:
 	_right_leg = _make_bird_leg(0.22, leg_h, orange)
 	_visual.add_child(_left_leg)
 	_visual.add_child(_right_leg)
+
+
+## NATCHEE (from a drawing): a flower on a thick stalk. One round head with a single huge eye,
+## a pointed petal on top like a crown, two enormous petals sweeping out left and right like
+## wings, two smaller ones drooping under them, two leaf arms on the stalk, and five long
+## pointed roots at the bottom that it crawls on.
+func _build_plant() -> void:
+	var root_h := _height * 0.22        # the roots reach this far down from the base of the stalk
+	var stalk_h := _height * 0.32
+	var head_r := _height * 0.14
+	var stalk_top := root_h + stalk_h
+	var head_y := stalk_top + head_r * 0.9
+	var stem := Color("3f7a2a")
+	var stem_dark := stem.darkened(0.35)
+	var petal := color
+	var petal_dark := color.darkened(0.3)
+	var petal_light := color.lightened(0.2)
+
+	# the stalk: thick at the bottom, thinner at the top, a few knots
+	var stalk := _capsule(0.16, stalk_h + 0.3, stem)
+	stalk.position.y = root_h + stalk_h / 2.0
+	stalk.scale = Vector3(1.0, 1.0, 0.85)
+	_visual.add_child(stalk)
+	var base := _sphere(0.28, stem_dark)
+	base.scale = Vector3(1.2, 0.7, 1.2)
+	base.position.y = root_h + 0.05
+	_visual.add_child(base)
+	for i in 3:
+		var knot := _sphere(0.1, stem_dark)
+		knot.scale = Vector3(1.5, 0.6, 1.0)
+		knot.position = Vector3(sin(i * 2.4) * 0.1, root_h + stalk_h * (0.3 + i * 0.25), 0.1)
+		_visual.add_child(knot)
+
+	# five roots, fanning out from the base, tips on the floor: what it crawls on
+	for i in 5:
+		var around := -PI * 0.8 + i * (PI * 1.6 / 4.0)   # spread around the back and sides, two reaching forward
+		var pivot := Node3D.new()
+		pivot.position = Vector3(0, root_h + 0.05, 0)
+		pivot.rotation.y = around
+		var tilt := 0.75 + (i % 2) * 0.15
+		pivot.set_meta("rest_x", tilt)
+		_visual.add_child(pivot)
+		var root_len := (root_h + 0.1) / cos(tilt) + 0.15
+		var root := _cone(0.1, root_len, stem)
+		root.rotation.x = PI            # point down
+		root.position.y = -root_len / 2.0
+		pivot.add_child(root)
+		var claw := _cone(0.045, 0.3, stem_dark)   # the hooked tip
+		claw.position = Vector3(0, -root_len + 0.05, 0.12)
+		claw.rotation.x = PI * 0.65
+		pivot.add_child(claw)
+		_limbs.append(pivot)
+		_limb_phase.append(i * TAU / 5.0 * 2.0)   # alternate roots move together: a hand crawling
+
+	# leaf arms on the stalk: these are what it whips you with
+	var arm_y := root_h + stalk_h * 0.55
+	var arm_len := stalk_h * 0.9
+	_left_arm = _make_limb(-0.14, arm_y, arm_len, 0.06, stem)
+	_right_arm = _make_limb(0.14, arm_y, arm_len, 0.06, stem)
+	for arm in [_left_arm, _right_arm]:
+		_visual.add_child(arm)
+		var leaf := _sphere(0.3, stem.lightened(0.15))
+		leaf.scale = Vector3(0.75, 1.5, 0.18)
+		leaf.position.y = -arm_len - 0.2
+		arm.add_child(leaf)
+		var vein := _box(Vector3(0.03, 0.75, 0.02), stem_dark)
+		vein.position = leaf.position + Vector3(0, 0, 0.055)
+		arm.add_child(vein)
+		var tip := _cone(0.09, 0.3, stem.lightened(0.1))
+		tip.position.y = -arm_len - 0.75
+		tip.rotation.x = PI
+		arm.add_child(tip)
+
+	# the head: a round face, fuzzy at the edges, with ONE eye in the middle
+	_head = Node3D.new()
+	_head.position.y = head_y
+	_visual.add_child(_head)
+	var face := _sphere(head_r, petal_light)
+	face.scale = Vector3(1.0, 1.0, 0.8)
+	_head.add_child(face)
+	var rim := _sphere(head_r * 1.08, petal_dark)
+	rim.scale = Vector3(1.0, 1.0, 0.55)
+	rim.position.z = -head_r * 0.15
+	_head.add_child(rim)
+	_eye = Node3D.new()
+	_eye.position = Vector3(0, head_r * 0.05, head_r * 0.72)
+	_head.add_child(_eye)
+	var white := _sphere(head_r * 0.55, Color("fff6b0"), true, 1.4)
+	white.scale = Vector3(1.0, 0.7, 0.45)
+	_eye.add_child(white)
+	var iris := _sphere(head_r * 0.3, Color("ffc800"), true, 2.5)
+	iris.scale = Vector3(1.0, 1.0, 0.5)
+	iris.position.z = head_r * 0.2
+	_eye.add_child(iris)
+	var pupil := _sphere(head_r * 0.17, Color("050205"))
+	pupil.scale = Vector3(1.0, 1.0, 0.5)
+	pupil.position.z = head_r * 0.33
+	_eye.add_child(pupil)
+	var light := OmniLight3D.new()
+	light.light_color = Color("ffd040")
+	light.light_energy = 0.7
+	light.omni_range = 3.0
+	light.position.z = head_r * 0.6
+	_eye.add_child(light)
+
+	# petals: the crown on top, the two big wings, two drooping under them
+	var crown := _cone(head_r * 0.6, head_r * 1.7, petal)
+	crown.position.y = head_r * 1.5
+	_head.add_child(crown)
+	var crown_back := _cone(head_r * 0.45, head_r * 1.3, petal_dark)
+	crown_back.position = Vector3(0, head_r * 1.35, -head_r * 0.35)
+	crown_back.rotation.x = -0.25
+	_head.add_child(crown_back)
+	for side in [-1.0, 1.0]:
+		var wing := _sphere(head_r * 1.1, petal)
+		wing.scale = Vector3(1.6, 0.85, 0.28)
+		wing.position = Vector3(side * head_r * 1.9, head_r * 0.35, -head_r * 0.3)
+		wing.rotation.z = side * 0.4
+		wing.rotation.y = side * 0.25
+		wing.set_meta("rest", wing.scale)
+		_head.add_child(wing)
+		_petals.append(wing)
+		var frill := _sphere(head_r * 0.7, petal_dark)
+		frill.scale = Vector3(1.4, 0.6, 0.2)
+		frill.position = Vector3(side * head_r * 2.6, head_r * 0.95, -head_r * 0.4)
+		frill.rotation.z = side * 0.8
+		frill.set_meta("rest", frill.scale)
+		_head.add_child(frill)
+		_petals.append(frill)
+		var droop := _sphere(head_r * 0.85, petal_dark)
+		droop.scale = Vector3(1.4, 0.7, 0.25)
+		droop.position = Vector3(side * head_r * 1.5, -head_r * 0.9, -head_r * 0.2)
+		droop.rotation.z = side * -0.55
+		droop.set_meta("rest", droop.scale)
+		_head.add_child(droop)
+		_petals.append(droop)
+		# the lower leaves on the stalk in the drawing
+		var leaf := _sphere(0.28, stem.lightened(0.1))
+		leaf.scale = Vector3(1.6, 0.5, 0.2)
+		leaf.position = Vector3(side * 0.5, root_h + stalk_h * 0.2, -0.05)
+		leaf.rotation.z = side * 0.3
+		_visual.add_child(leaf)
+
+
+## HOWLER: a low, long, four-legged thing. Ragged dark fur, torn ears, red eyes, a long snout
+## that is mostly teeth, a whip of a tail.
+func _build_hound() -> void:
+	var leg_h := _height * 0.5
+	var body_y := leg_h + 0.2
+	var body_len := 1.5
+	var dark := color.darkened(0.35)
+	var light := color.lightened(0.15)
+
+	var torso := _capsule(0.36, body_len, color)
+	torso.rotation.x = PI / 2.0
+	torso.position.y = body_y
+	_visual.add_child(torso)
+	var chest := _sphere(0.42, color)
+	chest.scale = Vector3(1.1, 1.0, 0.9)
+	chest.position = Vector3(0, body_y + 0.05, body_len * 0.35)
+	_visual.add_child(chest)
+	var haunch := _sphere(0.4, dark)
+	haunch.scale = Vector3(1.0, 0.9, 0.9)
+	haunch.position = Vector3(0, body_y - 0.02, -body_len * 0.38)
+	_visual.add_child(haunch)
+	# matted fur along the spine, ribs showing
+	for i in 6:
+		var tuft := _box(Vector3(0.12, 0.16, 0.14), dark)
+		tuft.position = Vector3(sin(i * 2.7) * 0.08, body_y + 0.36, body_len * 0.4 - i * 0.22)
+		tuft.rotation.x = -0.5 + (i % 2) * 0.3
+		_visual.add_child(tuft)
+	for i in 3:
+		for side in [-1.0, 1.0]:
+			var rib := _box(Vector3(0.05, 0.35, 0.05), light)
+			rib.position = Vector3(side * 0.33, body_y, -0.1 - i * 0.15)
+			rib.rotation.z = side * 0.2
+			_visual.add_child(rib)
+	var tail := _capsule(0.05, 0.9, dark)
+	tail.position = Vector3(0, body_y + 0.25, -body_len * 0.5 - 0.35)
+	tail.rotation.x = -1.1
+	_visual.add_child(tail)
+
+	# the head: forward, low, a long snout with teeth and a lower jaw that works
+	_head = Node3D.new()
+	_head.position = Vector3(0, body_y + 0.15, body_len * 0.5 + 0.3)
+	_visual.add_child(_head)
+	var skull := _sphere(0.3, color)
+	skull.scale = Vector3(1.0, 0.9, 1.1)
+	_head.add_child(skull)
+	var snout := _box(Vector3(0.34, 0.26, 0.55), color)
+	snout.position = Vector3(0, -0.06, 0.4)
+	_head.add_child(snout)
+	var nose := _box(Vector3(0.14, 0.1, 0.1), Color("120a0a"))
+	nose.position = Vector3(0, 0.05, 0.68)
+	_head.add_child(nose)
+	for i in 6:
+		var tooth := _cone(0.03, 0.12, Color("e8e2d0"))
+		tooth.position = Vector3((i - 2.5) * 0.06, -0.2, 0.45 + absf(i - 2.5) * -0.04)
+		tooth.rotation.x = PI
+		_head.add_child(tooth)
+	_jaw = Node3D.new()
+	_jaw.position = Vector3(0, -0.17, 0.12)
+	_head.add_child(_jaw)
+	var chin := _box(Vector3(0.3, 0.1, 0.5), dark)
+	chin.position = Vector3(0, -0.05, 0.28)
+	_jaw.add_child(chin)
+	for i in 5:
+		var tooth := _cone(0.025, 0.1, Color("e8e2d0"))
+		tooth.position = Vector3((i - 2) * 0.06, 0.03, 0.5 - absf(i - 2) * 0.04)
+		_jaw.add_child(tooth)
+	for side in [-1.0, 1.0]:
+		var eye := _sphere(0.07, Color("ff3020"), true, 2.5)
+		eye.scale = Vector3(1.0, 0.7, 0.8)
+		eye.position = Vector3(side * 0.16, 0.1, 0.24)
+		_head.add_child(eye)
+		var pupil := _sphere(0.025, Color("050000"))
+		pupil.position = eye.position + Vector3(0, 0, 0.06)
+		_head.add_child(pupil)
+		var light_node := OmniLight3D.new()
+		light_node.light_color = Color("ff4030")
+		light_node.light_energy = 0.4
+		light_node.omni_range = 2.0
+		light_node.position = eye.position
+		_head.add_child(light_node)
+		var ear := _cone(0.1, 0.35, dark)
+		ear.position = Vector3(side * 0.2, 0.32, -0.05)
+		ear.rotation.z = side * -0.4
+		_head.add_child(ear)
+
+	# four legs: the back pair are its legs, the front pair its "arms" (it rears up on the back ones)
+	_leg_h = leg_h
+	var foot := Vector3(0.18, 0.1, 0.32)
+	_left_leg = _make_leg(-0.28, leg_h, 0.09, color, foot, dark)
+	_right_leg = _make_leg(0.28, leg_h, 0.09, color, foot, dark)
+	_left_leg.position.z = -body_len * 0.38
+	_right_leg.position.z = -body_len * 0.38
+	_left_knee = _left_leg.get_node("Knee")
+	_right_knee = _right_leg.get_node("Knee")
+	_left_arm = _make_leg(-0.3, leg_h, 0.08, color, foot, dark)
+	_right_arm = _make_leg(0.3, leg_h, 0.08, color, foot, dark)
+	_left_arm.position.z = body_len * 0.38
+	_right_arm.position.z = body_len * 0.38
+	_fore_knees = [_left_arm.get_node("Knee"), _right_arm.get_node("Knee")]
+	for leg in [_left_leg, _right_leg, _left_arm, _right_arm]:
+		_visual.add_child(leg)
+
+
+## SKITTER: a wide, flat, near-black body slung low between six jointed legs, a fat abdomen
+## behind with red markings, a head at the front with a cluster of glowing eyes and two
+## clawed feelers it rears up and slams down with.
+func _build_spider() -> void:
+	var body_y := _height * 0.55
+	var dark := color.darkened(0.4)
+	var red := Color("b02020")
+
+	var thorax := _sphere(0.5, color)
+	thorax.scale = Vector3(1.2, 0.7, 1.0)
+	thorax.position.y = body_y
+	_visual.add_child(thorax)
+	var abdomen := _sphere(0.6, dark)
+	abdomen.scale = Vector3(1.1, 0.85, 1.3)
+	abdomen.position = Vector3(0, body_y + 0.1, -0.85)
+	_visual.add_child(abdomen)
+	var mark := _sphere(0.2, red)
+	mark.scale = Vector3(1.0, 0.3, 1.8)
+	mark.position = Vector3(0, body_y + 0.6, -0.85)
+	_visual.add_child(mark)
+	for side in [-1.0, 1.0]:
+		var stripe := _box(Vector3(0.08, 0.05, 0.6), red)
+		stripe.position = Vector3(side * 0.3, body_y + 0.55, -0.9)
+		stripe.rotation.y = side * 0.4
+		_visual.add_child(stripe)
+	# bristles
+	for i in 8:
+		var hair := _cone(0.03, 0.25, dark)
+		hair.position = Vector3(sin(i * 1.3) * 0.5, body_y + 0.4, -0.85 + cos(i * 1.3) * 0.5)
+		hair.rotation.x = cos(i * 1.3) * 0.5
+		hair.rotation.z = -sin(i * 1.3) * 0.5
+		_visual.add_child(hair)
+
+	# six legs: pivot at the body's side, a segment up and out to a knee, another down to the floor
+	for i in 3:
+		for side in [-1.0, 1.0]:
+			var z := 0.4 - i * 0.4
+			var pivot := Node3D.new()
+			pivot.position = Vector3(side * 0.45, body_y, z)
+			pivot.set_meta("side", side)
+			pivot.set_meta("rest_x", 0.0)
+			_visual.add_child(pivot)
+			var knee := Vector3(side * 0.75, 0.55, z * 0.6)
+			var foot := Vector3(side * 1.35, -body_y, z * 1.6)
+			pivot.add_child(_segment(Vector3.ZERO, knee, 0.07, color))
+			var joint := _sphere(0.09, dark)
+			joint.position = knee
+			pivot.add_child(joint)
+			pivot.add_child(_segment(knee, foot, 0.05, dark))
+			_limbs.append(pivot)
+			# two sets of three: front+back on one side move with the middle one on the other
+			_limb_phase.append(0.0 if (i + (0 if side > 0 else 1)) % 2 == 0 else PI)
+
+	# head with a cluster of eyes, fangs, and two clawed feelers (the arms)
+	_head = Node3D.new()
+	_head.position = Vector3(0, body_y + 0.05, 0.6)
+	_visual.add_child(_head)
+	var skull := _sphere(0.32, color)
+	skull.scale = Vector3(1.1, 0.8, 0.9)
+	_head.add_child(skull)
+	var eye_spots := [Vector3(0, 0.12, 0.28), Vector3(-0.14, 0.1, 0.26), Vector3(0.14, 0.1, 0.26),
+		Vector3(-0.24, 0.0, 0.2), Vector3(0.24, 0.0, 0.2), Vector3(-0.08, 0.2, 0.22), Vector3(0.08, 0.2, 0.22), Vector3(0, 0.0, 0.3)]
+	for n in eye_spots.size():
+		var spot: Vector3 = eye_spots[n]
+		var eye := _sphere(0.07 if n < 3 else 0.045, Color("ff3020"), true, 2.5)
+		eye.position = spot
+		_head.add_child(eye)
+		if n < 2:
+			var light_node := OmniLight3D.new()
+			light_node.light_color = Color("ff4030")
+			light_node.light_energy = 0.4
+			light_node.omni_range = 2.0
+			light_node.position = spot
+			_head.add_child(light_node)
+	_jaw = Node3D.new()
+	_jaw.position = Vector3(0, -0.15, 0.15)
+	_head.add_child(_jaw)
+	for side in [-1.0, 1.0]:
+		var fang := _cone(0.05, 0.3, Color("e8e2d0"))
+		fang.position = Vector3(side * 0.12, -0.12, 0.12)
+		fang.rotation.x = PI + side * 0.2
+		_jaw.add_child(fang)
+	_left_arm = _make_limb(-0.3, body_y + 0.1, 0.8, 0.05, color)
+	_right_arm = _make_limb(0.3, body_y + 0.1, 0.8, 0.05, color)
+	for arm in [_left_arm, _right_arm]:
+		arm.position.z = 0.7
+		_visual.add_child(arm)
+		var claw := _cone(0.07, 0.3, dark)
+		claw.position.y = -0.9
+		claw.rotation.x = PI
+		arm.add_child(claw)
+
+
+## GLOOP: a heap of glowing green slime that slid out of a tank. Half see-through, eyes of all
+## sizes floating in it, a wide black mouth, drips, and two long tendrils it brings down like ropes.
+func _build_blob() -> void:
+	var r := _height * 0.47
+	var glow := color
+	var deep := color.darkened(0.45)
+
+	_body = Node3D.new()
+	_body.position.y = 0.02
+	_visual.add_child(_body)
+	var heap := _sphere(r, glow)
+	heap.scale = Vector3(1.25, 1.0, 1.15)
+	heap.position.y = r * 0.95
+	var mat := heap.material_override as StandardMaterial3D
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(glow, 0.8)
+	mat.emission_enabled = true
+	mat.emission = glow
+	mat.emission_energy_multiplier = 0.35
+	mat.roughness = 0.2
+	_body.add_child(heap)
+	var core := _sphere(r * 0.6, deep)
+	core.scale = Vector3(1.2, 0.9, 1.0)
+	core.position.y = r * 0.8
+	_body.add_child(core)
+	# lumps and drips
+	for i in 6:
+		var lump := _sphere(r * 0.3, glow.darkened(0.1))
+		lump.position = Vector3(sin(i * 1.9) * r * 1.0, r * (0.6 + (i % 3) * 0.35), cos(i * 1.9) * r * 0.9)
+		_body.add_child(lump)
+		var drip := _capsule(0.05, 0.35, glow)
+		drip.position = Vector3(sin(i * 2.3 + 1.0) * r * 1.1, 0.2, cos(i * 2.3 + 1.0) * r * 1.0)
+		_body.add_child(drip)
+	var puddle := _sphere(r * 1.3, deep)
+	puddle.scale = Vector3(1.0, 0.06, 1.0)
+	puddle.position.y = 0.03
+	_body.add_child(puddle)
+
+	# eyes everywhere, all sizes; the mouth
+	_head = Node3D.new()
+	_head.position.y = r * 1.05
+	_body.add_child(_head)
+	var eye_spots := [[Vector3(0.0, 0.35, 1.0), 0.16], [Vector3(-0.5, 0.15, 0.85), 0.11], [Vector3(0.55, 0.3, 0.8), 0.09],
+		[Vector3(0.9, -0.1, 0.4), 0.08], [Vector3(-0.95, 0.0, 0.3), 0.1], [Vector3(-0.3, 0.7, 0.6), 0.07],
+		[Vector3(0.6, -0.4, 0.75), 0.06], [Vector3(0.0, 0.1, -1.0), 0.09], [Vector3(0.8, 0.3, -0.5), 0.07], [Vector3(-0.7, 0.4, -0.6), 0.08]]
+	for n in eye_spots.size():
+		var dir: Vector3 = (eye_spots[n][0] as Vector3).normalized()
+		var er: float = eye_spots[n][1]
+		var eye := _sphere(er, Color("f4f4ff"), true, 1.2)
+		eye.position = Vector3(dir.x * r * 1.2, dir.y * r * 0.9, dir.z * r * 1.1)
+		_head.add_child(eye)
+		var pupil := _sphere(er * 0.45, Color("120000"))
+		pupil.position = eye.position + dir * er * 0.7
+		_head.add_child(pupil)
+		if n < 3:
+			var light_node := OmniLight3D.new()
+			light_node.light_color = Color("a0ff80")
+			light_node.light_energy = 0.5
+			light_node.omni_range = 2.5
+			light_node.position = eye.position
+			_head.add_child(light_node)
+	var mouth := _sphere(r * 0.45, Color("050805"))
+	mouth.scale = Vector3(1.4, 0.5, 0.4)
+	mouth.position = Vector3(0, -r * 0.25, r * 1.05)
+	_head.add_child(mouth)
+	for i in 7:
+		var tooth := _cone(0.035, 0.14, Color("d8e0c0"))
+		tooth.position = Vector3((i - 3) * r * 0.16, -r * 0.14, r * 1.15 - absf(i - 3) * 0.04)
+		tooth.rotation.x = PI
+		_head.add_child(tooth)
+	_jaw = Node3D.new()
+	_jaw.position = Vector3(0, -r * 0.35, r * 0.9)
+	_head.add_child(_jaw)
+	var lip := _sphere(r * 0.35, deep)
+	lip.scale = Vector3(1.6, 0.35, 0.6)
+	lip.position = Vector3(0, -0.05, 0.15)
+	_jaw.add_child(lip)
+
+	# two tendrils, from the shoulders down to the floor
+	var arm_len := r * 1.6
+	_left_arm = _make_limb(-r * 1.1, r * 1.4, arm_len, 0.08, glow.darkened(0.15))
+	_right_arm = _make_limb(r * 1.1, r * 1.4, arm_len, 0.08, glow.darkened(0.15))
+	for arm in [_left_arm, _right_arm]:
+		_visual.add_child(arm)
+		var blob := _sphere(0.2, glow)
+		blob.scale = Vector3(1.0, 0.8, 1.2)
+		blob.position.y = -arm_len
+		arm.add_child(blob)
+		for k in 3:
+			var drip := _capsule(0.035, 0.25, glow)
+			drip.position = blob.position + Vector3((k - 1) * 0.12, -0.2, 0.1)
+			arm.add_child(drip)
+
+
+## A capsule running from `a` to `b` (both in the parent's space): legs with joints, tendrils.
+func _segment(a: Vector3, b: Vector3, radius: float, c: Color) -> MeshInstance3D:
+	var seg := _capsule(radius, a.distance_to(b) + radius, c)
+	var dir := (b - a).normalized()
+	seg.transform = Transform3D(Basis(Quaternion(Vector3.UP, dir)), (a + b) / 2.0)
+	return seg
 
 
 func _make_bird_leg(x: float, leg_h: float, c: Color) -> Node3D:

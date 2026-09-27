@@ -8,8 +8,10 @@ extends RefCounted
 ##   screech       something GOT you     heart    one heartbeat (lub-dub)
 ##   note          a music-box note      hum      the building's hum (loops)
 ##   panic         chase music (loops)   drone    rotor whine (loops)
-##   stomp / thud / clack   monster footsteps (giant / tall one / bird)
+##   stomp / thud / clack   monster footsteps (giant / tall one / bird + the spider)
+##   rustle / pad / squelch monster footsteps (Natchee's roots / Howler's paws / Gloop sliding)
 ##   growl / giggle / caw   monster voices (giant / tall one / bird)
+##   hiss / howl / chitter / gurgle   monster voices (Natchee / Howler / Skitter / Gloop)
 ##   snarl         a monster winding up to swing    whoosh   the swing itself
 ##   click         a floor button clunking down     door     a door grinding open
 
@@ -68,6 +70,20 @@ static func _make(sound_name: String) -> AudioStreamWAV:
 			return _door()
 		"creak":
 			return _creak()
+		"rustle":
+			return _rustle()
+		"pad":
+			return _pad()
+		"squelch":
+			return _squelch()
+		"hiss":
+			return _hiss()
+		"howl":
+			return _howl()
+		"chitter":
+			return _chitter()
+		"gurgle":
+			return _gurgle()
 	push_warning("Sfx: no sound called '%s'" % sound_name)
 	return _wav(PackedFloat32Array([0.0]))
 
@@ -360,6 +376,150 @@ static func _caw() -> AudioStreamWAV:
 		s *= 0.5 + 0.5 * sin(TAU * 60.0 * t)
 		s += lp.next(rng.randf_range(-1.0, 1.0)) * 0.3
 		var env := minf(t / 0.04, 1.0) * (1.0 if t < 0.5 else 1.0 - (t - 0.5) / 0.25)
+		out[i] = s * env
+	return _wav(_normalize(out, 0.85))
+
+
+## Natchee's roots dragging over the floor: a dry leafy scrape with a couple of scratches in it.
+static func _rustle() -> AudioStreamWAV:
+	var rng := _rng(61)
+	var n := int(RATE * 0.38)
+	var out := _silence(n)
+	var lp := _LowPass.new(2600.0)
+	var hp_state := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var noise := lp.next(rng.randf_range(-1.0, 1.0))
+		hp_state += (noise - hp_state) * 0.25
+		var dry := noise - hp_state * 0.8   # thin, papery
+		var drag := sin(clampf(t / 0.3, 0.0, 1.0) * PI)
+		var s := dry * drag * (0.7 + 0.3 * sin(TAU * 37.0 * t))
+		for at in [0.05, 0.14, 0.24]:   # the root tips catching
+			if t > at:
+				s += noise * exp(-(t - at) * 90.0) * 0.9
+		out[i] = s
+	return _wav(_normalize(out, 0.75))
+
+
+## Howler's paw: a soft pad with claws ticking on the floor.
+static func _pad() -> AudioStreamWAV:
+	var rng := _rng(62)
+	var n := int(RATE * 0.2)
+	var out := _silence(n)
+	var lp := _LowPass.new(600.0)
+	var tick_lp := _LowPass.new(4000.0)
+	for i in n:
+		var t := float(i) / RATE
+		var s := lp.next(rng.randf_range(-1.0, 1.0)) * exp(-t * 30.0) * 1.4
+		s += sin(TAU * 95.0 * t) * exp(-t * 45.0) * 0.6
+		if t > 0.02:
+			s += tick_lp.next(rng.randf_range(-1.0, 1.0)) * exp(-(t - 0.02) * 120.0) * 0.5
+		out[i] = s
+	return _wav(_normalize(out, 0.8))
+
+
+## Gloop moving: a wet squelch - a low slap and a bubble popping.
+static func _squelch() -> AudioStreamWAV:
+	var rng := _rng(63)
+	var n := int(RATE * 0.45)
+	var out := _silence(n)
+	var lp := _LowPass.new(450.0)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		phase += lerpf(160.0, 55.0, clampf(t / 0.3, 0.0, 1.0)) / RATE
+		var s := sin(TAU * phase) * exp(-t * 9.0) * 0.8
+		s += lp.next(rng.randf_range(-1.0, 1.0)) * exp(-t * 10.0) * (1.0 + 0.6 * sin(TAU * 24.0 * t))
+		if t > 0.18:   # the pop
+			var p := t - 0.18
+			s += sin(TAU * lerpf(900.0, 300.0, minf(p / 0.06, 1.0)) * p) * exp(-p * 60.0) * 0.5
+		out[i] = s
+	return _wav(_normalize(out, 0.85))
+
+
+## Natchee's voice: a long dry hiss, like air through leaves, with a thin whistle in it.
+static func _hiss() -> AudioStreamWAV:
+	var rng := _rng(64)
+	var n := int(RATE * 1.0)
+	var out := _silence(n)
+	var lp := _LowPass.new(5000.0)
+	var hp_state := 0.0
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var noise := lp.next(rng.randf_range(-1.0, 1.0))
+		hp_state += (noise - hp_state) * 0.3
+		var air := noise - hp_state * 0.9
+		phase += (2600.0 + sin(TAU * 5.0 * t) * 300.0) / RATE
+		var env := minf(t / 0.15, 1.0) * (1.0 if t < 0.7 else 1.0 - (t - 0.7) / 0.3)
+		out[i] = (air * (0.8 + 0.2 * sin(TAU * 11.0 * t)) + sin(TAU * phase) * 0.12) * env
+	return _wav(_normalize(out, 0.7))
+
+
+## Howler's voice: a howl that climbs, holds, wavers and falls away.
+static func _howl() -> AudioStreamWAV:
+	var rng := _rng(65)
+	var n := int(RATE * 1.7)
+	var out := _silence(n)
+	var lp := _LowPass.new(1200.0)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f := 0.0
+		if t < 0.5:
+			f = lerpf(220.0, 440.0, t / 0.5)
+		elif t < 1.1:
+			f = 440.0
+		else:
+			f = lerpf(440.0, 300.0, (t - 1.1) / 0.6)
+		f *= 1.0 + sin(TAU * 6.5 * t) * 0.02
+		phase += f / RATE
+		var s := 0.0
+		var amps := [1.0, 0.5, 0.35, 0.2, 0.12]
+		for h in 5:
+			s += sin(TAU * phase * (h + 1)) * amps[h]
+		s += lp.next(rng.randf_range(-1.0, 1.0)) * 0.2   # breath
+		var env := minf(t / 0.12, 1.0) * (1.0 if t < 1.3 else 1.0 - (t - 1.3) / 0.4)
+		out[i] = s * env
+	return _wav(_normalize(out, 0.85))
+
+
+## Skitter's voice: a fast chittering - a run of dry clicks with a shrill edge.
+static func _chitter() -> AudioStreamWAV:
+	var rng := _rng(66)
+	var n := int(RATE * 0.8)
+	var out := _silence(n)
+	var lp := _LowPass.new(4500.0)
+	for i in n:
+		var t := float(i) / RATE
+		var gap := 0.045 + 0.03 * (t / 0.8)   # slows down as it goes
+		var bt := fmod(t, gap)
+		var s := lp.next(rng.randf_range(-1.0, 1.0)) * exp(-bt * 220.0) * 1.5
+		s += sin(TAU * 2400.0 * t) * exp(-bt * 150.0) * 0.5
+		var env := 1.0 if t < 0.55 else 1.0 - (t - 0.55) / 0.25
+		out[i] = s * env
+	return _wav(_normalize(out, 0.75))
+
+
+## Gloop's voice: a wet gurgle - bubbles rising through something thick.
+static func _gurgle() -> AudioStreamWAV:
+	var rng := _rng(67)
+	var n := int(RATE * 1.2)
+	var out := _silence(n)
+	var lp := _LowPass.new(500.0)
+	var bubbles: Array = []
+	var at := 0.0
+	while at < 1.0:
+		bubbles.append([at, rng.randf_range(110.0, 320.0)])
+		at += rng.randf_range(0.06, 0.16)
+	for i in n:
+		var t := float(i) / RATE
+		var s := lp.next(rng.randf_range(-1.0, 1.0)) * 0.35 * (0.6 + 0.4 * sin(TAU * 9.0 * t))
+		for b in bubbles:
+			var p: float = t - b[0]
+			if p >= 0.0 and p < 0.12:
+				s += sin(TAU * (b[1] as float) * (1.0 + p * 2.5) * p) * exp(-p * 35.0) * 0.9
+		var env := minf(t / 0.1, 1.0) * (1.0 if t < 0.95 else 1.0 - (t - 0.95) / 0.25)
 		out[i] = s * env
 	return _wav(_normalize(out, 0.85))
 

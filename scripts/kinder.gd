@@ -7,7 +7,8 @@ extends Node3D
 ##   W  low wall (only the drone can fly over it)
 ##   =  fence (you can jump over it - THEY just step over it)
 ##   T  toy to collect                         X  exit door (opens when all toys are found)
-##   M  the tall one (Banban-ish)   J  the giant (Jumbo Josh-ish)   O  the bird (Opila-ish, not used right now)
+##   M  Banbo (tall one)   J  Jumbo (giant)   O  Opi (bird, retired)   N  Natchee (one-eyed flower)
+##   D  Howler (four legs)  K  Skitter (six legs)  G  Gloop (lab slime)  - one of each kind per chapter, max
 ##   L  a flickering ceiling lamp (a street lamp outside)
 ##   H  a cupboard you can hide in (put it against a wall). Inside, THEY can't see you -
 ##      unless one was already right behind you when you climbed in.
@@ -30,7 +31,7 @@ var wall_height := 3.0
 var monster_scale := 1.0       # how big THEY are in this chapter
 var hunt := 1.0                # how far THEY see / hear and how long they keep hunting, this chapter
 
-const MONSTER_LETTERS := "MJO"
+const MONSTER_LETTERS := "MJONDKG"   # index = Monster.Kind
 
 const TILE := 2.0
 const LOW_WALL_HEIGHT := 1.6

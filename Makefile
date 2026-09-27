@@ -1,11 +1,15 @@
 GODOT ?= godot
 BUILD  := build
 
-.PHONY: run arena touch test maps import editor mac ios ios-sim clean
+.PHONY: run window arena touch test maps import editor mac ios ios-sim clean
 
-## Play the game on this Mac (keyboard: WASD / arrows, Space = jump, E = drone, F = flashlight, Esc = pause)
+## Play the game fullscreen on this Mac (keyboard: WASD / arrows, Space = jump, E = drone, F = flashlight, Esc = pause)
 run: import
 	$(GODOT) --path . -- $(ARGS)
+
+## Same, but in a 1280x720 window (handy next to a terminal)
+window: import
+	$(GODOT) --path . --windowed --resolution 1280x720 -- $(ARGS)
 
 ## Play the original open-arena battery game instead
 arena: import
@@ -13,7 +17,7 @@ arena: import
 
 ## Play on the Mac but with the iPhone touch controls showing (click = finger)
 touch: import
-	$(GODOT) --path . -- --touch
+	$(GODOT) --path . --windowed --resolution 1280x720 -- --touch
 
 ## Headless smoke test - fails loudly if the game is broken (checks all 8 chapter maps first)
 test: maps import
