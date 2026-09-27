@@ -2,7 +2,7 @@
 """Sanity-check every chapter map in scripts/chapters.gd without opening Godot.
 
 Rectangular, one P, one X, every door has a button, monsters never in the start room, never
-two of the same kind of creature in one chapter (each is a character), and every toy / button /
+two of the same kind of creature in one chapter (each is a character), no creature fenced in, and every toy / button /
 the exit can actually be reached (walking + jumping fences, drone over low walls, doors opening
 once a button for them is reachable)."""
 import re
@@ -13,6 +13,7 @@ SRC = Path(__file__).resolve().parent.parent / "scripts" / "chapters.gd"
 WALL = "#"
 BLOCKS_ALL = set("#SZ^t")          # nobody walks through these (tables: play it safe)
 BLOCKS_ROBOT = BLOCKS_ALL | {"W"}   # the drone flies over low walls
+BLOCKS_MONSTER = BLOCKS_ROBOT | {"=", "H"}   # they can't jump fences or squeeze into cupboards
 NEIGHBOURS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
 # map letter -> creature (same order as Monster.Kind / kinder.gd MONSTER_LETTERS)
 MONSTERS = {"M": "Banbo", "J": "Jumbo", "O": "Opi", "N": "Natchee", "D": "Howler", "K": "Skitter", "G": "Gloop"}
@@ -117,6 +118,11 @@ def check(name, grid):
         for m in spots:
             if ids.get(m) == ids.get(start):
                 problems.append(f"{who} at {m} shares the start room")
+            room = {cell for cell, rid in ids.items() if rid == ids.get(m)}
+            walkable = {cell for cell in room if grid[cell[0]][cell[1]] not in BLOCKS_MONSTER}
+            reach = flood(grid, [m], BLOCKS_MONSTER, set())
+            if len(reach & walkable) < len(walkable) * 0.5:
+                problems.append(f"{who} at {m} is fenced in: it can only walk {len(reach & walkable)} of its room's {len(walkable)} tiles")
 
     # what can you reach? doors open once one of their buttons is reachable (robot or drone)
     open_doors = set()
