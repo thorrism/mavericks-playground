@@ -300,7 +300,7 @@ func _apply_kind() -> void:
 			# time, swaying, and its one eye sees very wide and very far. Then it drags itself at
 			# you on its roots, faster than looks possible, and whips you with its leaves.
 			kind_name = "Natchee"
-			color = Color("8a3a6a")
+			color = Color("e8c31c")
 			_gait = Gait.ROOTS
 			_height = 3.2
 			wander_speed = 1.1
@@ -1346,7 +1346,7 @@ func _build_plant() -> void:
 	var head_r := _height * 0.14
 	var stalk_top := root_h + stalk_h
 	var head_y := stalk_top + head_r * 0.9
-	var stem := Color("3f5a2a")
+	var stem := Color("9a8a24")
 	var stem_dark := stem.darkened(0.35)
 	var petal := color
 	var petal_dark := color.darkened(0.3)
@@ -1421,10 +1421,10 @@ func _build_plant() -> void:
 	_eye = Node3D.new()
 	_eye.position = Vector3(0, head_r * 0.05, head_r * 0.72)
 	_head.add_child(_eye)
-	var white := _sphere(head_r * 0.55, Color("f4f4ff"), true, 1.4)
+	var white := _sphere(head_r * 0.55, Color("fff6b0"), true, 1.4)
 	white.scale = Vector3(1.0, 0.7, 0.45)
 	_eye.add_child(white)
-	var iris := _sphere(head_r * 0.3, Color("c8e040"), true, 2.5)
+	var iris := _sphere(head_r * 0.3, Color("ffc800"), true, 2.5)
 	iris.scale = Vector3(1.0, 1.0, 0.5)
 	iris.position.z = head_r * 0.2
 	_eye.add_child(iris)
@@ -1433,7 +1433,7 @@ func _build_plant() -> void:
 	pupil.position.z = head_r * 0.33
 	_eye.add_child(pupil)
 	var light := OmniLight3D.new()
-	light.light_color = Color("d8f080")
+	light.light_color = Color("ffd040")
 	light.light_energy = 0.7
 	light.omni_range = 3.0
 	light.position.z = head_r * 0.6
