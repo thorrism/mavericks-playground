@@ -63,6 +63,7 @@ tries and your best escape time), Esc pauses (RESTART lives in that menu - no re
 - "More junk on the floor" / "no blood puddles." (the numbers in `_add_clutter`, kinder.gd)
 - "Make the monsters stand around longer." (`_idle_for = randf_range(1.5, 4.5)` in monster.gd)
 - "More creepy noises in the distance." (`_ambient_timer = randf_range(9.0, 22.0)` in spooky_audio.gd)
+- "Write a new song for chapter 5" / "make the songs change faster" / "play the lullaby on the bells." (the songbook in songs.gd - tunes are just note names like `E5 B4 G4 -`; `song_length` in spooky_audio.gd)
 - "Make the walls black and the floor lava." (colours at the top of kinder.gd)
 - "Make the drone go super fast." (`speed` in drone.gd)
 - "Make the robot red with a round head." (ROBOT DESIGN in robot.gd - you see it when you fly the drone)

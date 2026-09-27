@@ -146,6 +146,39 @@ func _test_kinder() -> void:
 			giant = m
 		m.set_physics_process(false)   # stand still while we test the mechanics; woken up further down
 	_check(level.get_node("Audio").get_child_count() >= 5, "level audio has hum, music, footsteps and effects players")
+	var audio: Node = level.get_node("Audio")
+	var songs_ok := Songs.LIST.size() >= 8
+	var song_names: Array[String] = []
+	for i in Songs.LIST.size():
+		var song: Dictionary = Songs.LIST[i]
+		song_names.append(song["name"])
+		var melody := Songs.melody(i)
+		var notes := 0
+		for f in melody:
+			if f > 0.0:
+				notes += 1
+		songs_ok = songs_ok and melody.size() >= 16 and notes >= 8 and Songs.BASE.has(song["instrument"])
+		songs_ok = songs_ok and Sfx.get_sound(song["instrument"]).data.size() > 1000
+		if song.has("bass"):
+			songs_ok = songs_ok and not Songs.bass(i).is_empty() and Sfx.get_sound(song["bass_instrument"]).data.size() > 1000
+	_check(songs_ok, "songbook: %d songs that parse and have instruments - %s" % [Songs.LIST.size(), ", ".join(song_names)])
+	_check(is_equal_approx(Songs.freq("A4"), 440.0) and absf(Songs.freq("E5") - 659.25) < 0.01
+		and absf(Songs.freq("F#4") - 369.99) < 0.01 and absf(Songs.freq("Bb2") - 116.54) < 0.01 and Songs.freq("-") == 0.0,
+		"note names turn into the right pitches")
+	_check(audio.song_name() == Songs.LIST[Songs.for_chapter(settings.chapter)]["name"],
+		"chapter %d starts on its own song: %s" % [settings.chapter + 1, audio.song_name()])
+	var first_song: String = audio.song_name()
+	for _i in 240:   # play a few seconds of it
+		audio._process(1.0 / 60.0)
+	_check(audio._song_gain > 0.5 and audio._note_index > 3, "the song fades in and notes are playing")
+	audio._song_time = audio.song_length + 0.1   # skip to the end of the song
+	for _i in 60:
+		audio._process(0.1)
+	_check(audio._song_gain == 0.0 or audio.song_name() != first_song, "after its time is up the song fades out")
+	for _i in 120:
+		audio._process(0.1)
+	_check(audio.song_name() != first_song and audio._song_gain > 0.5,
+		"...and the next one fades in: %s -> %s" % [first_song, audio.song_name()])
 	_check(Sfx.get_sound("chime").data.size() > 1000 and Sfx.get_sound("step0").data.size() > 1000 and Sfx.get_sound("scream").data.size() > 1000,
 		"generated sounds have data")
 	_check(Sfx.get_sound("click").data.size() > 1000 and Sfx.get_sound("door").data.size() > 1000

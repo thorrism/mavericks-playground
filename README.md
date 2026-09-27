@@ -59,7 +59,8 @@ chapter (`monster_scale` / `hunt` in the same file); later rooms have higher cei
 - Buttons clunk when pressed and doors grind open, so you can hear that something happened.
 - Collect every toy and the **golden door** opens and glows; walk through it to escape.
 - All sound is generated from code: footsteps (yours and theirs, heavier when they chase), a toy chime,
-  a broken music-box tune, the drone's rotor whine, and each monster's own voice.
+  a songbook of eight wrong little tunes (each chapter starts on its own; every couple of minutes one
+  fades out and the next fades in), the drone's rotor whine, and each monster's own voice.
 - The **drone** is unlimited: `E` sends it out, `E` again brings you back, as often as you like.
   Monsters ignore your parked body while you fly.
 
@@ -111,7 +112,8 @@ scripts/settings.gd     difficulty, which chapter you're on, what's unlocked, be
 tools/check_maps.py     checks every chapter map is solvable (run by `make test`)
 scripts/monster.gd      the creatures: behaviour knobs at the top, brain (A* paths, seeing/hearing), then a model per kind
 scripts/lamp.gd         a flickering ceiling lamp (`L` on the map)
-scripts/spooky_audio.gd hum / music box / panic music / your footsteps / chime / scream
+scripts/spooky_audio.gd hum / the songs / panic music / your footsteps / chime / scream
+scripts/songs.gd        the songbook: tunes written as notes ("E5 B4 G4 -"), one per chapter to start
 scripts/sfx.gd          every sound effect, generated from maths (add a new one here)
 scripts/blood_text.gd   the dripping blood letters
 scripts/drone.gd        the flying drone (speed, how high it can go)
