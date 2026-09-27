@@ -7,6 +7,7 @@ extends RefCounted
 ##   chime         picking up a toy      scream   something SAW you
 ##   screech       something GOT you     heart    one heartbeat (lub-dub)
 ##   note          a music-box note      hum      the building's hum (loops)
+##   piano / bell / organ / whistle   the other instruments the songs are played on (see songs.gd)
 ##   panic         chase music (loops)   drone    rotor whine (loops)
 ##   stomp / thud / clack   monster footsteps (giant / tall one / bird + the spider)
 ##   rustle / pad / squelch monster footsteps (Natchee's roots / Howler's paws / Gloop sliding)
@@ -42,6 +43,14 @@ static func _make(sound_name: String) -> AudioStreamWAV:
 			return _heartbeat()
 		"note":
 			return _music_box_note()
+		"piano":
+			return _toy_piano()
+		"bell":
+			return _bell()
+		"organ":
+			return _organ()
+		"whistle":
+			return _whistle()
 		"hum":
 			return _hum()
 		"panic":
@@ -231,6 +240,81 @@ static func _music_box_note() -> AudioStreamWAV:
 		s += sin(TAU * f * 5.4 * t) * 0.12 * exp(-t * 10.0)   # the metallic "ping"
 		out[i] = s * env
 	return _wav(_normalize(out, 0.7))
+
+
+## A toy piano key (A4): a dull hammer knock and a plinky note that dies fast.
+static func _toy_piano() -> AudioStreamWAV:
+	var rng := _rng(41)
+	var n := int(RATE * 1.4)
+	var out := _silence(n)
+	var f := 440.0
+	var lp := _LowPass.new(1200.0)
+	for i in n:
+		var t := float(i) / RATE
+		var env := minf(t / 0.003, 1.0) * exp(-t * 3.5)
+		var s := sin(TAU * f * t) + sin(TAU * f * 2.01 * t) * 0.5 + sin(TAU * f * 3.0 * t) * 0.2 * exp(-t * 6.0)
+		s += sin(TAU * f * 4.2 * t) * 0.15 * exp(-t * 14.0)   # the tinny edge
+		s *= env
+		s += lp.next(rng.randf_range(-1.0, 1.0)) * exp(-t * 60.0) * 0.5   # hammer knock
+		out[i] = s
+	return _wav(_normalize(out, 0.7))
+
+
+## A small church bell (A4): a bright strike, then it rings for a long time with a slow wobble.
+static func _bell() -> AudioStreamWAV:
+	var n := int(RATE * 3.5)
+	var out := _silence(n)
+	var f := 440.0
+	var partials := [[0.5, 0.5, 0.8], [1.0, 1.0, 1.0], [1.19, 0.5, 1.4], [1.56, 0.35, 1.8], [2.0, 0.3, 2.2], [2.51, 0.2, 3.0], [2.66, 0.15, 3.4], [3.01, 0.1, 4.0]]
+	for i in n:
+		var t := float(i) / RATE
+		var s := 0.0
+		for p in partials:
+			s += sin(TAU * f * p[0] * t) * p[1] * exp(-t * p[2])
+		s *= minf(t / 0.002, 1.0) * (1.0 + 0.08 * sin(TAU * 3.0 * t))
+		out[i] = s
+	return _wav(_normalize(out, 0.7))
+
+
+## A reedy old organ note (A3) that holds, wavers, then stops with a puff of air.
+static func _organ() -> AudioStreamWAV:
+	var rng := _rng(43)
+	var n := int(RATE * 2.4)
+	var out := _silence(n)
+	var f := 220.0
+	var lp := _LowPass.new(900.0)
+	for i in n:
+		var t := float(i) / RATE
+		var vib := 1.0 + 0.004 * sin(TAU * 5.3 * t)
+		var s := sin(TAU * f * vib * t) + sin(TAU * f * 2.0 * vib * t) * 0.5 + sin(TAU * f * 3.0 * vib * t) * 0.35
+		s += sin(TAU * f * 4.0 * vib * t) * 0.15 + sin(TAU * f * 0.5 * t) * 0.4
+		s += lp.next(rng.randf_range(-1.0, 1.0)) * 0.05   # air
+		var env := minf(t / 0.08, 1.0)
+		if t > 1.9:
+			env *= maxf(0.0, 1.0 - (t - 1.9) / 0.45)
+		out[i] = s * env
+	return _wav(_normalize(out, 0.6))
+
+
+## Somebody whistling one note (A5), breathy, a little off, with a wobble that gets worse.
+static func _whistle() -> AudioStreamWAV:
+	var rng := _rng(44)
+	var n := int(RATE * 1.2)
+	var out := _silence(n)
+	var f := 880.0
+	var lp := _LowPass.new(2500.0)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var wobble := 1.0 + (0.006 + 0.01 * t) * sin(TAU * 6.0 * t) + (0.01 if t < 0.05 else 0.0) * (1.0 - t / 0.05)
+		phase += f * wobble / RATE
+		var s := sin(TAU * phase) + sin(TAU * phase * 2.0) * 0.08
+		s += lp.next(rng.randf_range(-1.0, 1.0)) * 0.12   # breath
+		var env := minf(t / 0.06, 1.0)
+		if t > 0.8:
+			env *= maxf(0.0, 1.0 - (t - 0.8) / 0.4)
+		out[i] = s * env
+	return _wav(_normalize(out, 0.55))
 
 
 ## The building: two low notes slowly beating against each other + a whisper of air. Loops.
