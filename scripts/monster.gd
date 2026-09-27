@@ -1346,7 +1346,7 @@ func _build_plant() -> void:
 	var head_r := _height * 0.14
 	var stalk_top := root_h + stalk_h
 	var head_y := stalk_top + head_r * 0.9
-	var stem := Color("9a8a24")
+	var stem := Color("3f7a2a")
 	var stem_dark := stem.darkened(0.35)
 	var petal := color
 	var petal_dark := color.darkened(0.3)
