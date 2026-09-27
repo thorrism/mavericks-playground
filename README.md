@@ -40,7 +40,8 @@ chapter (`monster_scale` / `hunt` in the same file); later rooms have higher cei
   chapter 3 some doors are **timed**: they grind shut again after a few seconds (the last five are
   counted down on screen), so you have to run for it - or press the button again. A door never shuts
   on anyone standing in it.
-- **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over.
+- **Low walls**: only the drone can fly over them. **Fences**: the robot can jump over - THEY can't, they have to
+  walk round (like tables, shelves and everything else solid), so a fenced pen is a place they can't follow you.
 - The **creatures** - never two of the same kind in a chapter, and you meet new ones as you go:
   `M` Banbo (tall teal grin, bow tie) and `J` Jumbo (huge green brute) from chapter 1;
   `N` Natchee (a one-eyed flower that stands rooted, then crawls at you on five roots) from chapter 3;
