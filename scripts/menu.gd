@@ -4,8 +4,9 @@ extends CanvasLayer
 ##   Title:  THE ABYSS in dripping blood, the chapter picker (1-8, escape one to unlock the next),
 ##           difficulty, PLAY, your records
 ##   Pause:  RESUME / RESTART / difficulty / QUIT TO TITLE
-## Enter or Space = play/resume, Left/Right = change difficulty, Up/Down = change chapter,
-## Esc = back to the game.
+## Enter or Space = the highlighted button (PLAY/RESUME by default; Up/Down move the highlight
+## between RESUME / RESTART / QUIT TO TITLE while paused), Left/Right = change difficulty,
+## Up/Down on the title screen = change chapter, Esc = back to the game.
 
 signal opened
 signal play
@@ -56,7 +57,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mode == Mode.HIDDEN:
 		return
 	if event.is_action_pressed("ui_accept"):
-		_on_play()
+		_accept()
 	elif event.is_action_pressed("ui_cancel") and mode == Mode.PAUSED:
 		_on_play()
 	elif event.is_action_pressed("ui_left"):
@@ -87,6 +88,7 @@ func show_title(result := "") -> void:
 	_play.text = "PLAY"
 	_restart.visible = false
 	_quit.text = "QUIT"
+	_quit.focus_mode = Control.FOCUS_NONE   # Up/Down change chapter here; Enter must never quit by accident
 	_stats.visible = true
 	_open()
 
@@ -105,6 +107,7 @@ func show_pause() -> void:
 	_play.text = "RESUME"
 	_restart.visible = true
 	_quit.text = "QUIT TO TITLE"
+	_quit.focus_mode = Control.FOCUS_ALL
 	_stats.visible = false
 	_open()
 
@@ -129,6 +132,16 @@ func _open() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_play.grab_focus()
 	opened.emit()
+
+
+## Enter / Space: fire whichever button is highlighted (on the key press, so it can't get lost
+## when the menu hides), PLAY/RESUME if none is.
+func _accept() -> void:
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused is Button and focused.is_visible_in_tree():
+		focused.pressed.emit()
+	else:
+		_on_play()
 
 
 func _on_play() -> void:

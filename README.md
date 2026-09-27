@@ -67,7 +67,7 @@ chapter (`monster_scale` / `hunt` in the same file); later rooms have higher cei
 | Jump / drone up | Space (hold to fly the drone up) | JUMP button |
 | Switch robot <-> drone | E | DRONE button |
 | Flashlight on / off | F | - |
-| Restart | Esc -> RESTART | `II` -> RESTART |
+| Restart | Esc -> RESTART (or Esc, Down, Enter) | `II` -> RESTART |
 | Back to the title screen (pick another chapter) | Esc -> QUIT TO TITLE | `II` -> QUIT TO TITLE |
 
 Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
@@ -83,7 +83,7 @@ and `make test` runs it too. The original battery arena is still there: `make ar
 ## Play it right now
 
 ```sh
-make run        # opens the game window on the Mac
+make run        # opens the game fullscreen on the Mac (make window = in a window)
 make arena      # the original open-arena battery game instead
 make touch      # same, but shows the iPhone touch controls (click = finger)
 make test       # 2-second headless check that nothing is broken

@@ -561,6 +561,42 @@ func _test_menus(level: Node3D) -> Node:
 	await process_frame
 	_check(menu.mode == menu.Mode.HIDDEN and not paused, "RESUME unfreezes the game")
 
+	# Esc, Down (highlight RESTART), Enter: the real keyboard route. Enter must fire the
+	# highlighted button, not RESUME.
+	menu.show_pause()
+	await process_frame
+	_check(menu._play.has_focus(), "pause menu opens with RESUME highlighted")
+	_press_key(KEY_DOWN)
+	await process_frame
+	_check(menu._restart.has_focus(), "Down highlights RESTART")
+	var old_level := level
+	_press_key(KEY_ENTER)
+	await _settle(5)
+	var restarted: Node = null
+	for child in root.get_children():
+		if child.has_method("find_path") and child != old_level:
+			restarted = child
+	_check(restarted != null and (not is_instance_valid(old_level) or old_level.is_queued_for_deletion()),
+		"Enter on RESTART tears the run down and builds a fresh level")
+	if restarted == null:
+		return level
+	level = restarted as Node3D
+	menu = level.get_node("Menu")
+	hud = level.get_node("HUD")
+	await process_frame
+	_check(menu.mode == menu.Mode.HIDDEN and not paused and level._playing and hud.ticking and hud.elapsed < 1.0,
+		"...straight back into the game: unfrozen, clock restarted (%.1fs), no title screen" % hud.elapsed)
+
+	# Enter on the title screen must never quit the game: Up/Down change chapter there, not the highlight
+	menu.show_title()
+	await process_frame
+	_press_key(KEY_DOWN)
+	await process_frame
+	_check(menu._play.has_focus() and not menu._quit.has_focus(), "title screen: Down doesn't move the highlight onto QUIT")
+	settings.set_chapter(level.chapter)
+	menu._on_play()
+	await process_frame
+
 	# R is not a restart key any more (RESTART is only in the pause menu)
 	var tries_before: int = settings.attempts
 	Input.action_press("restart")
@@ -593,6 +629,16 @@ func _test_menus(level: Node3D) -> Node:
 	_check(after_quit.chapter == chapter_before and fresh_menu._quit.text == "QUIT" and not fresh_menu._result.visible,
 		"same chapter (%s), QUIT now means quit the game, no stale result text" % Chapters.title(after_quit.chapter))
 	return after_quit
+
+
+## A real key press + release, routed through the window like a keyboard would be.
+func _press_key(keycode: Key) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventKey.new()
+		ev.keycode = keycode
+		ev.physical_keycode = keycode
+		ev.pressed = pressed
+		root.push_input(ev)
 
 
 func _count_in_map(ch: String, chapter := 0) -> int:
