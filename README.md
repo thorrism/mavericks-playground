@@ -68,6 +68,7 @@ chapter (`monster_scale` / `hunt` in the same file); later rooms have higher cei
 | Switch robot <-> drone | E | DRONE button |
 | Flashlight on / off | F | - |
 | Restart | Esc -> RESTART | `II` -> RESTART |
+| Back to the title screen (pick another chapter) | Esc -> QUIT TO TITLE | `II` -> QUIT TO TITLE |
 
 Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
 (`flashlight_*`, `fog_density`, wall colours, the scare words) and `scripts/monster.gd`

@@ -3,13 +3,14 @@ extends CanvasLayer
 ## it's up. Pick a difficulty here; it saves and applies straight away.
 ##   Title:  THE ABYSS in dripping blood, the chapter picker (1-8, escape one to unlock the next),
 ##           difficulty, PLAY, your records
-##   Pause:  RESUME / RESTART / difficulty / QUIT
+##   Pause:  RESUME / RESTART / difficulty / QUIT TO TITLE
 ## Enter or Space = play/resume, Left/Right = change difficulty, Up/Down = change chapter,
 ## Esc = back to the game.
 
 signal opened
 signal play
 signal restart
+signal quit_to_title
 signal chapter_picked(index: int)
 
 enum Mode { HIDDEN, TITLE, PAUSED }
@@ -85,6 +86,7 @@ func show_title(result := "") -> void:
 	_chapter_name.visible = true
 	_play.text = "PLAY"
 	_restart.visible = false
+	_quit.text = "QUIT"
 	_stats.visible = true
 	_open()
 
@@ -102,6 +104,7 @@ func show_pause() -> void:
 	_chapter_name.text = Chapters.title(Settings.chapter)
 	_play.text = "RESUME"
 	_restart.visible = true
+	_quit.text = "QUIT TO TITLE"
 	_stats.visible = false
 	_open()
 
@@ -120,7 +123,7 @@ func _open() -> void:
 	_dim.visible = true
 	_box.visible = true
 	_pause_tap.visible = false
-	_quit.visible = not OS.has_feature("mobile")
+	_quit.visible = mode == Mode.PAUSED or not OS.has_feature("mobile")   # phones can't quit the app, but can go back to the title
 	TouchControls.release_all()
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -136,6 +139,16 @@ func _on_play() -> void:
 func _on_restart() -> void:
 	hide_menu()
 	restart.emit()
+
+
+## QUIT: from the pause menu it drops the run and goes back to the title screen;
+## from the title screen it closes the game.
+func _on_quit() -> void:
+	if mode == Mode.PAUSED:
+		hide_menu()
+		quit_to_title.emit()
+	else:
+		get_tree().quit()
 
 
 ## Tap a chapter number (only unlocked ones work). The level rebuilds itself behind the menu.
@@ -270,7 +283,7 @@ func _build() -> void:
 
 	_quit = _button("QUIT", 24)
 	_quit.custom_minimum_size = Vector2(360, 50)
-	_quit.pressed.connect(func(): get_tree().quit())
+	_quit.pressed.connect(_on_quit)
 	_box.add_child(_quit)
 
 	_box.add_child(_spacer(10))

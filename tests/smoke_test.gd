@@ -524,13 +524,15 @@ func _test_kinder() -> void:
 	_check(game.last_result.contains("CHAPTER 2 UNLOCKED") or (after_escape and after_escape.get_node("Menu")._result.text.contains("CHAPTER 2 UNLOCKED")),
 		"the result screen says which chapter you unlocked")
 	if after_escape:
-		await _test_menus(after_escape)
-		after_escape.queue_free()
+		var leftover: Node = await _test_menus(after_escape)
+		if is_instance_valid(leftover):
+			leftover.queue_free()
 	await process_frame
 
 
-## Title screen after an escape, PLAY, Esc pause menu, difficulty changing monsters live.
-func _test_menus(level: Node3D) -> void:
+## Title screen after an escape, PLAY, Esc pause menu, difficulty changing monsters live,
+## QUIT TO TITLE. Returns whichever level node is left standing at the end.
+func _test_menus(level: Node3D) -> Node:
 	var menu: CanvasLayer = level.get_node("Menu")
 	var hud: CanvasLayer = level.get_node("HUD")
 	await process_frame
@@ -568,6 +570,29 @@ func _test_menus(level: Node3D) -> void:
 	await _settle(5)
 	_check(is_instance_valid(level) and not level.is_queued_for_deletion() and settings.attempts == tries_before,
 		"pressing R does nothing (same level, still try #%d)" % settings.attempts)
+
+	# QUIT in the pause menu goes back to the title screen (same chapter), not out of the game
+	var chapter_before: int = level.chapter
+	menu.show_pause()
+	await process_frame
+	_check(menu._quit.text == "QUIT TO TITLE" and menu._quit.visible, "pause menu offers QUIT TO TITLE")
+	menu._on_quit()
+	await _settle(5)
+	var after_quit: Node = null
+	for child in root.get_children():
+		if child.has_method("find_path") and child != level:
+			after_quit = child
+	_check(after_quit != null and (not is_instance_valid(level) or level.is_queued_for_deletion()),
+		"QUIT TO TITLE tears the run down and builds a fresh level")
+	if after_quit == null:
+		return level
+	await process_frame
+	var fresh_menu: CanvasLayer = after_quit.get_node("Menu")
+	_check(fresh_menu.mode == fresh_menu.Mode.TITLE and paused and not after_quit._playing,
+		"...and the title screen is up with the level frozen behind it")
+	_check(after_quit.chapter == chapter_before and fresh_menu._quit.text == "QUIT" and not fresh_menu._result.visible,
+		"same chapter (%s), QUIT now means quit the game, no stale result text" % Chapters.title(after_quit.chapter))
+	return after_quit
 
 
 func _count_in_map(ch: String, chapter := 0) -> int:

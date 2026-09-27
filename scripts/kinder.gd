@@ -229,6 +229,7 @@ func _ready() -> void:
 	menu.opened.connect(func() -> void: hud.visible = false)
 	menu.play.connect(_on_menu_play)
 	menu.restart.connect(_restart)
+	menu.quit_to_title.connect(_quit_to_title)
 	menu.chapter_picked.connect(_on_chapter_picked)
 	if Game.title_pending:
 		# first boot / just escaped: the title screen, with the level frozen behind it
@@ -300,6 +301,13 @@ func _on_chapter_picked(index: int) -> void:
 	if index == chapter or _playing:
 		return
 	Game.title_pending = true
+	_restart()
+
+
+## QUIT TO TITLE in the pause menu: drop this run, rebuild the chapter behind the title screen.
+func _quit_to_title() -> void:
+	Game.title_pending = true
+	Game.last_result = ""
 	_restart()
 
 
