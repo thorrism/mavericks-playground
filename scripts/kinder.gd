@@ -114,6 +114,7 @@ const WALL_WORDS: Array[String] = ["RUN", "don't let them see you", "HELP", "the
 const LOW_WALL_COLOR := Color("3a4a4c")
 const FENCE_COLOR := Color("6b5a1f")
 const DOOR_COLORS: Array[Color] = [Color("c0392b"), Color("2e6fd6"), Color("d4a017"), Color("7d3c98"), Color("00897b")]
+const DOOR_COLOR_NAMES: Array[String] = ["RED", "BLUE", "YELLOW", "PURPLE", "GREEN"]
 const EXIT_COLOR := Color("ffd700")
 const TOY_COLORS: Array[Color] = [Color("ff5a5a"), Color("4f8dff"), Color("ffcc33"), Color("9b5de5"), Color("00c2a8"), Color("ff8c42")]
 const LAMP_COLORS: Array[Color] = [Color("9fffb0"), Color("ffb090"), Color("b0c8ff")]
@@ -881,10 +882,20 @@ func _on_button_pressed(door_key: String) -> void:
 		opened_any = true
 		door.open()
 	var first: StaticBody3D = _doors[door_key][0]
+	var which := door_name(door_key)
 	if first.close_after > 0.0:
-		Game.say("*clunk*   A door opened somewhere... it won't stay open long.  %d seconds." % int(first.close_after), 3.0)
+		Game.say("*clunk*   The %s DOOR is open - %d seconds.  RUN!" % [which, int(first.close_after)], 3.0)
 	elif opened_any:
-		Game.say("*clunk*   A door opened somewhere...", 2.5)
+		Game.say("*clunk*   The %s DOOR is open." % which, 2.5)
+
+
+## What the game calls a door in messages: "PURPLE" for door 4 / button d, so a kid can match
+## the button they just hit to the door it opened.
+func door_name(door_key: String) -> String:
+	var idx := int(door_key) - 1
+	if idx < 0 or idx >= DOOR_COLOR_NAMES.size():
+		return "door %s" % door_key
+	return DOOR_COLOR_NAMES[idx]
 
 
 ## Timed doors count down and slam shut again - unless someone is standing in the doorway.
@@ -896,7 +907,7 @@ func _tick_timed_doors(delta: float) -> void:
 		if left > 0.0:
 			_door_timers[door] = left
 			if left <= 5.0 and int(left + delta) != int(left):
-				Game.say("the door...  %d" % (int(left) + 1), 0.9)
+				Game.say("the %s door...  %d" % [door_name(_key_of_door(door)), int(left) + 1], 0.9)
 			continue
 		var in_the_way := door.global_position.distance_to(robot.global_position) < TILE * 0.9
 		in_the_way = in_the_way or (drone.active and door.global_position.distance_to(drone.global_position) < TILE * 0.9)
@@ -907,7 +918,14 @@ func _tick_timed_doors(delta: float) -> void:
 			continue
 		_door_timers.erase(door)
 		door.close()
-		Game.say("*SLAM*", 1.5)
+		Game.say("*SLAM*   The %s door shut.  Its button opens it again." % door_name(_key_of_door(door)), 2.5)
+
+
+func _key_of_door(door: StaticBody3D) -> String:
+	for key: String in _doors:
+		if door in _doors[key]:
+			return key
+	return ""
 
 
 ## How long (seconds) until this door slams shut; 0 if it isn't counting down.

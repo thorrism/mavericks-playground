@@ -877,12 +877,20 @@ func _test_chapters() -> void:
 				if c >= 0 and cell.x < 0:
 					cell = Vector2i(c, r)
 			_check(door.close_after == float(timed[key]) and not door.is_open, "%s: door %s is timed (%.0fs) and starts shut" % [def["name"], key, door.close_after])
+			var said: Array[String] = []
+			var listener := func(text: String, _seconds: float) -> void: said.append(text)
+			game.message.connect(listener)
 			level._on_button_pressed(key)
 			await _settle(2)
 			_check(door.is_open and not level._grid.is_point_solid(cell) and level.door_time_left(door) > 0.0, "%s: button opens it and the countdown starts (%.1fs)" % [def["name"], level.door_time_left(door)])
+			var colour: String = level.door_name(key)
+			_check(colour in level.DOOR_COLOR_NAMES and said.size() == 1 and said[0].contains(colour) and said[0].contains("%d seconds" % int(door.close_after)), "%s: it tells you WHICH door (%s) and how long: '%s'" % [def["name"], colour, said[0] if said.size() > 0 else ""])
+			said.clear()
 			level._door_timers[door] = 0.01
 			await _settle(3)
 			_check(not door.is_open and level._grid.is_point_solid(cell) and level.door_time_left(door) == 0.0, "%s: ...then it slams shut and is solid again" % def["name"])
+			_check(said.size() == 1 and said[0].contains("SLAM") and said[0].contains(colour) and said[0].to_lower().contains("button"), "%s: the slam names the door and reminds you its button re-opens it: '%s'" % [def["name"], said[0] if said.size() > 0 else ""])
+			game.message.disconnect(listener)
 			level._on_button_pressed(key)
 			await _settle(2)
 			_check(door.is_open, "%s: pressing the button again re-opens it" % def["name"])
