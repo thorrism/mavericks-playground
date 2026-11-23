@@ -75,8 +75,32 @@ chapter (`monster_scale` / `hunt` in the same file); later rooms have higher cei
 | Restart | Esc -> RESTART (or Esc, Down, Enter) | `II` -> RESTART |
 | Back to the title screen (pick another chapter) | Esc -> QUIT TO TITLE | `II` -> QUIT TO TITLE |
 
+### Scarier (November 2026)
+
+- The picture itself is dirty: film grain, a dark lens, colours that split at the edges, and it all
+  gets worse the closer one of THEM is (`ScreenFilter` shader in `scenes/kinder.tscn`). It tears
+  apart when one sees you.
+- Darker, foggier rooms with mist on the floor; eyes glow through it. Grime and water stains on every
+  surface (generated noise, no image files). A blood moon over the playground, green fog in the lab,
+  and most of the gym's lights are dead.
+- Your flashlight trails a moment behind where you look, has a dirty lens, and sputters when
+  something is moving close by. Ceiling lamps strobe and die when a creature walks under them.
+- Caught: the camera is dragged right up into its face before the screen goes black.
+- The creatures stop and stare when they spot you from across the room, move like stop-motion
+  while they hunt, snap their heads to wrong angles, and their eyes follow you. **Banbo only moves
+  when you're not looking at him**: put the flashlight on him and he freezes mid-step.
+- More blood: drag trails out of cupboards and across floors, smears down walls, drips from the
+  ceiling, handprints low down and on the ceiling.
+- Scripted scares (`scripts/scares.gd`): after a moment of silence, a tall black shape stands at
+  the end of the room or peeks round a doorway, words appear on the wall behind you, a cupboard
+  slams shut by itself, a toy giggles, or the lamps around you die. Collect the last toy and every
+  light in the building goes out.
+- Sound: an echo sized to each room, everything muffled while you hide, whispering behind you,
+  and sometimes footsteps that follow yours and stop just after you do.
+
 Too dark / too scary / too hard? The knobs are at the top of `scripts/kinder.gd`
-(`flashlight_*`, `fog_density`, wall colours, the scare words) and `scripts/monster.gd`
+(`flashlight_*`, `fog_density`, `scares_enabled`, wall colours, the scare words), `scripts/scares.gd`
+(how often the scripted scares happen) and `scripts/monster.gd`
 (`chase_speed`, `see_distance`, `hear_distance`, `lose_after`, `spawn_grace` - per kind in `_apply_kind`).
 
 Every chapter is a **text map** in `scripts/chapters.gd` - move a `T`, add an `M`, hang a lamp with `L`,

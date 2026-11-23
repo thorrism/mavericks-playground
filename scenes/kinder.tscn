@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/kinder.gd" id="1_kinder"]
 [ext_resource type="PackedScene" path="res://scenes/robot.tscn" id="2_robot"]
@@ -23,22 +23,77 @@ void fragment() {
 shader = SubResource("Shader_vignette")
 shader_parameter/strength = 0.0
 
+[sub_resource type="Shader" id="Shader_screen"]
+code = "shader_type canvas_item;
+// The whole picture, made worse: film grain, a dark lens, colours that split at the edges,
+// a slow rolling camcorder bar - and all of it gets uglier the closer one of THEM is.
+//   fear    0 = calm .. 1 = it's right behind you      (kinder.gd _update_fear)
+//   glitch  0 = fine .. 1 = the picture tears apart     (when something sees / grabs you)
+uniform sampler2D screen : hint_screen_texture, filter_linear;
+uniform float fear : hint_range(0.0, 1.0) = 0.0;
+uniform float glitch : hint_range(0.0, 1.0) = 0.0;
+uniform float grain = 0.07;
+uniform float darkness = 0.4;
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void fragment() {
+	vec2 uv = SCREEN_UV;
+	float tick = floor(TIME * 24.0);
+	// the picture wobbles when you're scared
+	uv.x += sin(uv.y * 30.0 + TIME * 4.0) * 0.0025 * fear;
+	// tearing: random horizontal bands jump sideways
+	float band = floor(uv.y * 28.0);
+	float tear = step(1.0 - glitch * 0.6, hash(vec2(band, tick)));
+	uv.x += (hash(vec2(band, tick + 7.0)) - 0.5) * 0.12 * tear * glitch;
+	vec2 d = uv - vec2(0.5);
+	float split = 0.003 + 0.01 * fear + 0.03 * glitch;
+	vec3 c;
+	c.r = texture(screen, uv + d * split).r;
+	c.g = texture(screen, uv).g;
+	c.b = texture(screen, uv - d * split).b;
+	// a faint rolling bar, like an old camcorder
+	float bar = smoothstep(0.0, 0.08, abs(fract(uv.y * 0.5 - TIME * 0.04) - 0.5));
+	c *= mix(1.06, 1.0, bar);
+	c *= 0.96 + 0.04 * sin(FRAGCOORD.y * 1.7);
+	// grain: more of it when scared, a blizzard when the picture glitches
+	float n = hash(FRAGCOORD.xy * 0.37 + vec2(tick * 1.31, tick * 0.73)) - 0.5;
+	c += n * (grain + 0.1 * fear + 0.25 * glitch);
+	// the lens: dark all round the edges, darker when scared
+	float lens = smoothstep(0.95, 0.2, length(d * vec2(1.25, 1.0)));
+	c *= mix(1.0 - darkness - 0.25 * fear, 1.0, lens);
+	COLOR = vec4(c, 1.0);
+}"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_screen"]
+shader = SubResource("Shader_screen")
+shader_parameter/fear = 0.0
+shader_parameter/glitch = 0.0
+shader_parameter/grain = 0.07
+shader_parameter/darkness = 0.4
+
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
 background_color = Color(0.01, 0.01, 0.015, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.25, 0.28, 0.35, 1)
-ambient_light_energy = 0.07
+ambient_light_energy = 0.055
 tonemap_mode = 2
-tonemap_exposure = 1.15
+tonemap_exposure = 1.3
 glow_enabled = true
-glow_intensity = 0.6
-glow_bloom = 0.1
+glow_intensity = 0.9
+glow_bloom = 0.15
+glow_hdr_threshold = 0.7
 fog_enabled = true
-fog_light_color = Color(0.02, 0.02, 0.03, 1)
-fog_density = 0.045
+fog_light_color = Color(0.015, 0.018, 0.025, 1)
+fog_density = 0.05
+fog_height = 0.6
+fog_height_density = 0.25
 adjustment_enabled = true
-adjustment_saturation = 0.8
+adjustment_contrast = 1.12
+adjustment_saturation = 0.55
 
 [node name="Kinder" type="Node3D"]
 script = ExtResource("1_kinder")
@@ -60,9 +115,9 @@ near = 0.1
 [node name="Flashlight" type="SpotLight3D" parent="Camera3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.15, -0.2, 0)
 light_color = Color(1, 0.93, 0.8, 1)
-light_energy = 10.0
+light_energy = 14.0
 shadow_enabled = true
-spot_range = 18.0
+spot_range = 22.0
 spot_angle = 38.0
 spot_angle_attenuation = 1.2
 
@@ -80,6 +135,16 @@ counter_mode = "count"
 count_word = "Toys"
 intro_text = "Find the 6 toys.  Don't let them find you."
 win_text = "All toys found.  The golden door is open.  RUN."
+
+[node name="ScreenFilter" type="ColorRect" parent="HUD"]
+material = SubResource("ShaderMaterial_screen")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
 
 [node name="Vignette" type="ColorRect" parent="HUD"]
 material = SubResource("ShaderMaterial_vignette")

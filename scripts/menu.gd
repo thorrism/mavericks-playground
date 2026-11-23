@@ -129,7 +129,8 @@ func _open() -> void:
 	_quit.visible = mode == Mode.PAUSED or not OS.has_feature("mobile")   # phones can't quit the app, but can go back to the title
 	TouchControls.release_all()
 	get_tree().paused = true
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if not OS.has_feature("mobile"):   # phones have no mouse pointer
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_play.grab_focus()
 	opened.emit()
 
