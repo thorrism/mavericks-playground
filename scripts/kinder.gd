@@ -44,10 +44,12 @@ const FENCE_HEIGHT := 0.7
 ##   wall_height taller rooms as the chapters go on, so the bigger creatures fit under the ceiling
 ##   ambient     background light (0.07 is the dark school; the moonlit playground is a little brighter)
 ##   glow        the lamps' colour; tanks and crates glow this colour in the lab
+##   dead_lamps  most of the lamps are dead: only every fourth one still works (the gym)
+##   reverb      how big the room sounds: 0 = a cupboard .. 1 = a cathedral (default 0.4)
 const THEMES: Dictionary = {
 	"classroom": {},
 	"hallway": {
-		"wall_height": 3.2,
+		"wall_height": 3.2, "reverb": 0.7,
 		"floor": Color("3e3f44"), "walls": [Color("5a6a7a"), Color("6a5a48"), Color("4d6a5a")],
 		"stripes": [Color("a8c0d8"), Color("d8b890"), Color("98c8a8")],
 		"words": ["RUN", "don't stop", "it walks the hall at night", "HELP", "they can hear you", "lockers won't save you"],
@@ -61,7 +63,7 @@ const THEMES: Dictionary = {
 		"shelf": Color("4a3020"), "table": Color("5a4030"), "lamps": [Color("ffb070"), Color("ffd090")],
 	},
 	"lunchroom": {
-		"wall_height": 3.5,
+		"wall_height": 3.5, "reverb": 0.6,
 		"floor": Color("5a5850"), "walls": [Color("7a7a4a"), Color("8a5a4a"), Color("4a6a6a")],
 		"stripes": [Color("e0d890"), Color("e0a898"), Color("98c8c8")],
 		"words": ["EAT", "hungry", "it's still hungry", "HELP", "they can smell you", "don't eat that"],
@@ -73,6 +75,7 @@ const THEMES: Dictionary = {
 		"stripes": [Color("90b0e0"), Color("e09090"), Color("c0c0c0")],
 		"words": ["RUN FASTER", "jump", "it never gets tired", "HELP", "no time outs", "they can hear you"],
 		"crate": Color("2a4a8a"), "table": Color("6a6a6a"), "lamps": [Color("ffffff"), Color("e0e0ff")],
+		"dead_lamps": true, "reverb": 0.9,
 	},
 	"art": {
 		"wall_height": 3.8,
@@ -82,13 +85,13 @@ const THEMES: Dictionary = {
 		"table": Color("9a8a7a"), "crate": Color("7a6a5a"),
 	},
 	"playground": {
-		"outdoors": true, "decor": false, "ambient": 0.10,
+		"outdoors": true, "decor": false, "ambient": 0.06, "reverb": 0.15,
 		"floor": Color("22301c"), "outside": Color("151e12"), "walls": [Color("1e3a1e"), Color("243e22")],
 		"low_wall": Color("4a3a34"), "fence": Color("555a5e"), "shelf": Color("6a3a2a"), "crate": Color("8a3a2a"),
 		"lamps": [Color("ffd9a0")], "words": [],
 	},
 	"lab": {
-		"wall_height": 5.4, "ambient": 0.05, "glow": Color("46ff70"),
+		"wall_height": 5.4, "ambient": 0.03, "glow": Color("46ff70"), "reverb": 0.85,
 		"floor": Color("2a2e2c"), "ceiling": Color("1a1c1c"), "walls": [Color("3a4a48"), Color("4a4a52"), Color("2e3e3e")],
 		"stripes": [Color("80c0b0"), Color("a0a0c0"), Color("70b0a0")],
 		"words": ["SUBJECT 7 ESCAPED", "it went wrong", "seal the lab", "HELP", "we made them", "DON'T OPEN THE TANKS", "they grew"],
@@ -129,6 +132,7 @@ const ButtonScript := preload("res://scripts/button_pad.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 const DroneScript := preload("res://scripts/drone.gd")
 const LampScript := preload("res://scripts/lamp.gd")
+const ScaresScript := preload("res://scripts/scares.gd")
 
 ## Fences live on this physics layer: the player and drone bump into them, monsters walk through.
 const FENCE_LAYER := 2
@@ -138,7 +142,9 @@ const FENCE_LAYER := 2
 @export var flashlight_range := 18.0      # how far your light reaches
 @export var flashlight_energy := 10.0
 @export var flashlight_angle := 38.0      # cone width in degrees
-@export var fog_density := 0.045          # bigger = murkier
+@export var fog_density := 0.065          # bigger = murkier
+@export var flashlight_lag := 9.0         # how fast the beam catches up with where you look (bigger = stiffer)
+@export var scares_enabled := true        # the scripted scares in scripts/scares.gd (shapes in the dark, words behind you...)
 @export var mouse_sensitivity := 0.0025
 @export var touch_sensitivity := 0.006
 @export var eye_height := 1.5
@@ -150,6 +156,7 @@ const FENCE_LAYER := 2
 @onready var flashlight: SpotLight3D = $Camera3D/Flashlight
 @onready var fade: ColorRect = $HUD/Fade
 @onready var vignette: ColorRect = $HUD/Vignette
+@onready var screen_filter: ColorRect = $HUD/ScreenFilter
 @onready var blood_text: Control = $HUD/BloodText
 @onready var hud: CanvasLayer = $HUD
 @onready var menu: CanvasLayer = $Menu
@@ -170,6 +177,14 @@ var _bob_time := 0.0
 var _shake := 0.0
 var _flicker := 0.0
 var _scare_flash := 0.0
+var _fear := 0.0              # 0..1: how close the nearest of THEM is (drives the screen filter)
+var _glitch := 0.0            # 0..1: the picture tearing (a spot, a catch)
+var _torch_dead := 0.0        # seconds the flashlight is completely dead (the last-toy blackout)
+var _sputter_in := 35.0       # seconds until the flashlight sputters on its own
+var _light_q := Quaternion.IDENTITY   # where the flashlight beam points (it trails your look)
+var _jumpscare: Node3D        # the one that got you: the camera stares into its face
+var _jumpscare_t := 0.0
+var scares: Node
 var _time := 0.0
 var _toy_count := 0
 var _door_timers: Dictionary = {}   # door node -> seconds until a timed door slams shut again
@@ -180,6 +195,7 @@ var flashlight_on := true
 var _cupboard_doors: Dictionary = {}   # Vector2i cell -> Array of door hinges (Node3D)
 var _door_swing: Dictionary = {}       # Vector2i cell -> 0.0 (hanging open) .. 1.0 (shut)
 var _flung: Dictionary = {}            # Vector2i cell -> seconds the doors stay yanked open
+var _slammed: Dictionary = {}          # Vector2i cell -> seconds the doors stay slammed shut (nobody inside...)
 const DOOR_OPEN_ANGLES: Array[float] = [1.1, 2.2]   # left / right door, hanging open
 const DOOR_SHUT_GAP := 0.05                        # a crack of light between the shut doors
 
@@ -217,14 +233,21 @@ func _ready() -> void:
 	flashlight.spot_range = flashlight_range
 	flashlight.light_energy = flashlight_energy
 	flashlight.spot_angle = flashlight_angle
+	flashlight.light_projector = _lens_texture()
 	env.environment.fog_density = fog_density
 	_apply_theme_environment()
+	if scares_enabled:
+		scares = Node.new()
+		scares.name = "Scares"
+		scares.set_script(ScaresScript)
+		add_child(scares)
 
 	fade.modulate.a = 1.0
 	create_tween().tween_property(fade, "modulate:a", 0.0, 2.0)
 
 	_yaw = 0.0   # face "up" the map, towards the fence and the first door
 	_update_camera(0.0)
+	_light_q = camera.global_basis.get_rotation_quaternion()
 
 	hud.subtitle = Chapters.title(chapter).to_lower()
 	menu.opened.connect(func() -> void: hud.visible = false)
@@ -258,7 +281,7 @@ func _load_chapter(index: int) -> void:
 func _apply_theme_environment() -> void:
 	var e: Environment = env.environment.duplicate()
 	env.environment = e
-	e.ambient_light_energy = theme.get("ambient", 0.07)
+	e.ambient_light_energy = theme.get("ambient", 0.035)
 	var moon: DirectionalLight3D = get_node_or_null("Moon")
 	if outdoors:
 		var sky := Sky.new()
@@ -272,10 +295,13 @@ func _apply_theme_environment() -> void:
 		e.background_mode = Environment.BG_SKY
 		e.sky = sky
 		e.fog_density = fog_density * 0.5
-		e.fog_light_color = Color(0.03, 0.04, 0.07)
+		e.fog_light_color = Color(0.05, 0.03, 0.04)
+		e.fog_height = 0.9          # a low mist between the hedges
+		e.fog_height_density = 0.8
 		e.ambient_light_color = Color(0.4, 0.5, 0.8)
 		if moon:
-			moon.light_energy = 0.35
+			moon.light_energy = 0.3
+			moon.light_color = Color(1.0, 0.6, 0.55)
 		# the moon itself, hanging low over the far hedge
 		var moon_ball := MeshInstance3D.new()
 		moon_ball.name = "Moon"
@@ -284,17 +310,19 @@ func _apply_theme_environment() -> void:
 		sphere.height = 12.0
 		moon_ball.mesh = sphere
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.85, 0.88, 1.0)
+		# a blood moon
+		mat.albedo_color = Color(0.95, 0.45, 0.35)
 		mat.emission_enabled = true
-		mat.emission = Color(0.7, 0.75, 0.95)
-		mat.emission_energy_multiplier = 1.4
+		mat.emission = Color(0.9, 0.25, 0.15)
+		mat.emission_energy_multiplier = 1.6
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		moon_ball.material_override = mat
 		moon_ball.position = Vector3(-70, 55, -140)
 		_world.add_child(moon_ball)
 	elif theme.has("glow"):
 		e.ambient_light_color = Color(0.3, 0.5, 0.4)
-		e.fog_light_color = Color(0.01, 0.03, 0.02)
+		e.fog_light_color = Color(0.02, 0.09, 0.04)   # the whole lab swims in green
+		e.fog_density = fog_density * 1.3
 
 
 ## Picked another chapter on the title screen: rebuild behind the menu.
@@ -379,9 +407,12 @@ func _swing_cupboard_doors(delta: float) -> void:
 		var flung: float = _flung.get(cell, 0.0)
 		if flung > 0.0:
 			_flung[cell] = flung - delta
-		var want := 1.0 if (cell == inside and flung <= 0.0) else 0.0
+		var slammed: float = _slammed.get(cell, 0.0)
+		if slammed > 0.0:
+			_slammed[cell] = slammed - delta
+		var want := 1.0 if ((cell == inside or slammed > 0.0) and flung <= 0.0) else 0.0
 		var swing: float = _door_swing.get(cell, 0.0)
-		var rate := 6.0 if flung > 0.0 else (1.4 if want > swing else 2.2)
+		var rate := 6.0 if (flung > 0.0 or slammed > 0.0) else (1.4 if want > swing else 2.2)
 		swing = move_toward(swing, want, delta * rate)
 		_door_swing[cell] = swing
 		var hinges: Array = _cupboard_doors[cell]
@@ -398,6 +429,14 @@ func fling_cupboard(cell: Vector2i) -> void:
 	if _door_swing.get(cell, 0.0) > 0.2:
 		_creak(cell, 6.0, 1.6)
 	_flung[cell] = 6.0
+
+
+## A cupboard slams its doors shut all by itself (a scripted scare), then slowly creaks open again.
+func slam_cupboard(cell: Vector2i) -> void:
+	if not _cupboard_doors.has(cell):
+		return
+	_slammed[cell] = randf_range(4.0, 8.0)
+	_creak(cell, 6.0, 0.7)
 
 
 func _creak(cell: Vector2i, db: float, pitch: float) -> void:
@@ -417,6 +456,9 @@ func _creak(cell: Vector2i, db: float, pitch: float) -> void:
 
 
 func _update_camera(delta: float) -> void:
+	if _jumpscare and is_instance_valid(_jumpscare):
+		_jumpscare_camera(delta)
+		return
 	var focus: Node3D = drone if drone.active else robot
 	robot.move_yaw = _yaw
 	drone.move_yaw = _yaw
@@ -430,6 +472,28 @@ func _update_camera(delta: float) -> void:
 		shake = Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0.0) * _shake * 0.08
 	camera.global_position = focus.global_position + Vector3(0, height, 0) + shake
 	camera.rotation = Vector3(_pitch + shake.y * 0.5, _yaw + shake.x * 0.5, shake.x * 0.6)
+	# the flashlight is in your hand, not glued to your eyes: the beam trails a moment behind
+	var look := camera.global_basis.get_rotation_quaternion()
+	_light_q = _light_q.slerp(look, minf(1.0, delta * flashlight_lag)) if delta > 0.0 else look
+	flashlight.global_basis = Basis(_light_q)
+
+
+## Caught: the camera is dragged right up to its face as it lunges at you.
+func _jumpscare_camera(delta: float) -> void:
+	_jumpscare_t += delta
+	var m := _jumpscare
+	var head: Node3D = m._head if "_head" in m and m._head else m
+	var grow: float = m._visual.scale.y if "_visual" in m and m._visual else 1.0
+	var face := head.global_position + Vector3.UP * 0.25 * grow
+	var facing: Vector3 = m._facing() if m.has_method("_facing") else Vector3.FORWARD
+	var t := clampf(_jumpscare_t / 0.45, 0.0, 1.0)
+	var dist := lerpf(2.8, 1.05, t * t) * maxf(grow, 0.6)
+	var jitter := Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0.0) * 0.04 * (0.5 + t)
+	camera.global_position = face + facing * dist + Vector3.UP * 0.05 + jitter
+	if camera.global_position.distance_to(face) > 0.05:
+		camera.look_at(face, Vector3.UP)
+	camera.fov = lerpf(80.0, 42.0, t)
+	flashlight.global_basis = camera.global_basis
 
 
 ## Red edges that pulse while hunted, camera shake, a flashlight that stutters when you're scared.
@@ -452,9 +516,40 @@ func _update_fear(delta: float) -> void:
 	var current: float = mat.get_shader_parameter("strength")
 	mat.set_shader_parameter("strength", clampf(move_toward(current, vignette_target, delta * 1.5) + _scare_flash * 0.6, 0.0, 1.0))
 
+	# the picture itself gets worse: a moving one within 10 m makes you uneasy, a hunter terrifies
+	var near := INF
+	for m in get_tree().get_nodes_in_group("monster"):
+		var d: float = m.global_position.distance_to(robot.global_position)
+		if m.chasing or (m.is_physics_processing() and m.get_real_velocity().length() > 0.5):
+			near = minf(near, d)
+	var fear_target := 0.0
+	if hunted:
+		fear_target = 0.45 + 0.55 * clampf(1.0 - nearest / 12.0, 0.0, 1.0)
+	elif near < 10.0:
+		fear_target = 0.3 * (1.0 - near / 10.0)
+	_fear = move_toward(_fear, fear_target, delta * 0.8)
+	_glitch = move_toward(_glitch, 0.0, delta * 1.6)
+	var filter := screen_filter.material as ShaderMaterial
+	filter.set_shader_parameter("fear", _fear)
+	filter.set_shader_parameter("glitch", maxf(_glitch, _scare_flash * 0.5))
+
+	# the torch sputters when something is moving close by - before it has even seen you -
+	# and every now and then all on its own
+	if near < 8.0 and randf() < delta * 1.5:
+		_flicker = maxf(_flicker, randf_range(0.1, 0.35))
+	_sputter_in -= delta
+	if _sputter_in <= 0.0:
+		_sputter_in = randf_range(25.0, 60.0)
+		_flicker = maxf(_flicker, randf_range(0.3, 0.8))
+	_torch_dead = maxf(_torch_dead - delta, 0.0)
+
 	var energy := flashlight_energy if flashlight_on else 0.0
 	if _flicker > 0.0 and flashlight_on:
 		energy = flashlight_energy * (0.15 if randf() < 0.35 else 1.0)
+	if _torch_dead > 0.0:
+		energy = 0.0
+	if _jumpscare:
+		energy = flashlight_energy * (0.3 if randf() < 0.8 else 0.05)   # don't wash its face out
 	if flashlight.light_energy != energy:
 		flashlight.light_energy = energy
 
@@ -489,6 +584,11 @@ func _on_all_toys_found() -> void:
 		beacon.position.y = 2.2
 		exit_door.add_child(beacon)
 	Game.say("ALL TOYS FOUND.  %s" % chapter_def.get("exit_hint", "The GOLDEN DOOR is open.  RUN!"), 6.0)
+	# ...and every light in the building dies for a moment
+	for lamp in get_tree().get_nodes_in_group("lamp"):
+		lamp.blackout(3.0)
+	_torch_dead = 2.2
+	_glitch = 0.6
 
 
 ## You made it out: freeze, fade to white-gold, and start a fresh level.
@@ -527,6 +627,7 @@ func _on_spotted(monster: Node3D) -> void:
 	_shake = maxf(_shake, 0.5)
 	_scare_flash = 0.85
 	_flicker = 0.6
+	_glitch = 0.8
 	var words: String = scare_words[randi() % scare_words.size()]
 	blood_text.scare(words.replace("NAME", _name_of(monster)), 2.4)
 
@@ -538,6 +639,7 @@ func _on_found(monster: Node3D) -> void:
 	_shake = maxf(_shake, 0.7)
 	_scare_flash = 1.0
 	_flicker = 0.8
+	_glitch = 1.0
 	blood_text.scare("%s FOUND YOU" % _name_of(monster), 2.4)
 	Game.say("GET OUT.  RUN.", 1.5)
 
@@ -571,15 +673,24 @@ func _on_caught(monster: Node3D) -> void:
 	var to_monster := monster.global_position - robot.global_position
 	_yaw = atan2(-to_monster.x, -to_monster.z)
 	_pitch = 0.35
+	# JUMP SCARE: it holds still with its mouth wide while the camera is dragged into its face
+	_jumpscare = monster
+	_jumpscare_t = 0.0
+	_glitch = 1.0
+	_torch_dead = 0.0
+	flashlight_on = true
+	if monster.has_method("hold_for_jumpscare"):
+		monster.hold_for_jumpscare(3.0)
 	blood_text.scare("%s GOT YOU" % _name_of(monster), 2.2)
 	fade.color = Color(0.5, 0.0, 0.0, 1.0)
-	fade.modulate.a = 0.0
+	fade.modulate.a = 0.22   # a red wash over its face
 	var tween := create_tween()
-	tween.tween_property(fade, "modulate:a", 0.8, 0.12)
-	tween.tween_property(fade, "modulate:a", 0.3, 0.25)
-	tween.tween_property(fade, "color", Color.BLACK, 0.5)
-	tween.parallel().tween_property(fade, "modulate:a", 1.0, 0.5)
-	tween.tween_interval(1.2)
+	tween.tween_interval(0.5)
+	tween.tween_property(fade, "modulate:a", 0.9, 0.06)
+	tween.tween_property(fade, "modulate:a", 0.4, 0.2)
+	tween.tween_property(fade, "color", Color.BLACK, 0.4)
+	tween.parallel().tween_property(fade, "modulate:a", 1.0, 0.4)
+	tween.tween_interval(1.0)
 	tween.tween_callback(_restart)
 
 
@@ -813,6 +924,7 @@ func _build_level() -> void:
 					lamp.set_script(LampScript)
 					var lamp_colors: Array = theme.get("lamps", LAMP_COLORS)
 					lamp.color = lamp_colors[lamp_index % lamp_colors.size()]
+					lamp.dead = theme.get("dead_lamps", false) and lamp_index % 4 != 0
 					if outdoors:
 						# a street lamp: a pole with the light up top, a wider but no brighter pool
 						lamp.position = pos + Vector3(0.6, 4.2, 0.6)
@@ -957,6 +1069,10 @@ func _decorate_wall(row: int, col: int, pos: Vector3, region: int) -> void:
 			_add_handprint(base + normal * 0.01, along_x, hash_value)
 		elif hash_value < 46 and not words.is_empty():
 			_add_scrawl(base + normal * 0.015, normal, words[hash_value % words.size()], hash_value)
+		elif hash_value < 54:
+			_add_smear(base + normal * 0.01, along_x, hash_value)
+		elif hash_value < 60:
+			_add_handprint(base + normal * 0.01 + Vector3(0, -0.45, 0), along_x, hash_value)   # small, low down
 
 
 func _flat(along_x: bool, width: float, height: float) -> Vector3:
@@ -978,7 +1094,7 @@ func _add_poster(pos: Vector3, along_x: bool, color: Color, seed_value: int) -> 
 
 
 ## A small red handprint, dragged downwards.
-func _add_handprint(pos: Vector3, along_x: bool, seed_value: int) -> void:
+func _add_handprint(pos: Vector3, along_x: bool, seed_value: int) -> Node3D:
 	var holder := Node3D.new()
 	holder.position = pos + Vector3(0, 1.0 + (seed_value % 4) * 0.15, 0)
 	holder.rotation.y = 0.0 if along_x else PI / 2.0
@@ -991,6 +1107,39 @@ func _add_handprint(pos: Vector3, along_x: bool, seed_value: int) -> void:
 	for i in 3:
 		var drip := _add_box(holder, Vector3((i - 1) * 0.05, -0.2 - i * 0.07, 0), Vector3(0.02, 0.25 + i * 0.1, 0.01), BLOOD_COLOR, false)
 		drip.position.y -= drip.mesh.size.y / 2.0 - 0.1
+	return holder
+
+
+## Something was dragged down this wall: a long dark smear from head height to the floor.
+func _add_smear(pos: Vector3, along_x: bool, seed_value: int) -> void:
+	var holder := Node3D.new()
+	holder.position = pos + Vector3(((seed_value % 5) - 2) * 0.15, 0, 0) if along_x else pos + Vector3(0, 0, ((seed_value % 5) - 2) * 0.15)
+	holder.rotation.y = 0.0 if along_x else PI / 2.0
+	_world.add_child(holder)
+	var top := 1.9 + (seed_value % 3) * 0.15
+	var steps := 7
+	for i in steps:
+		var f := float(i) / steps
+		var w := 0.32 - f * 0.18 + ((seed_value + i * 7) % 5) * 0.015
+		var y := top - f * (top - 0.25)
+		_add_box(holder, Vector3(((seed_value + i * 3) % 3 - 1) * 0.02, y, 0), Vector3(w, (top - 0.25) / steps + 0.03, 0.01), BLOOD_COLOR.darkened(0.15 * (i % 2)), false)
+	_add_handprint(pos, along_x, seed_value + 1)
+
+
+## A trail of something dark, dragged across the floor from `from` towards `to`.
+func _add_drag_trail(from: Vector3, to: Vector3, seed_value: int) -> void:
+	var flat := Vector3(to.x - from.x, 0, to.z - from.z)
+	var length := flat.length()
+	if length < 0.2:
+		return
+	var yaw := atan2(flat.x, flat.z)
+	var pieces := maxi(2, int(length / 0.4))
+	for i in pieces:
+		var f := (i + 0.5) / pieces
+		var spot := from.lerp(to, f) + Vector3(sin(f * 9.0 + seed_value) * 0.08, 0.0, 0.0)
+		var piece := _add_box(_world, Vector3(spot.x, 0.006 + i * 0.0004, spot.z), Vector3(0.38 - f * 0.12, 0.004, length / pieces + 0.08), BLOOD_COLOR.darkened(0.25 + 0.1 * (i % 2)), false) as MeshInstance3D
+		piece.rotation.y = yaw + ((seed_value + i) % 3 - 1) * 0.08
+		(piece.material_override as StandardMaterial3D).roughness = 0.35
 
 
 ## Words scratched into the paint.
@@ -1064,6 +1213,9 @@ func _add_cupboard(row: int, col: int, pos: Vector3) -> void:
 	label.shaded = true
 	label.position = Vector3(0, 1.5, -0.91)
 	holder.add_child(label)
+	# somebody didn't make it: a trail leads out of every other cupboard
+	if (row + col) % 2 == 0:
+		_add_drag_trail(pos + facing * 0.1, pos + facing * (TILE * 1.6) + facing.cross(Vector3.UP) * 0.6, row * 7 + col)
 
 
 ## A little kids' table with two tiny chairs (one usually knocked over) and crayons.
@@ -1122,7 +1274,10 @@ func _add_clutter(row: int, col: int, pos: Vector3) -> void:
 	var spread := Vector3(((hash_value * 7) % 11 - 5) * 0.1, 0, ((hash_value * 13) % 11 - 5) * 0.1)
 	if hash_value < 9:
 		for i in 2 + hash_value % 2:
-			var block := _add_box(_world, pos + spread + Vector3((i - 1) * 0.3, 0.12, (i % 2) * 0.25), Vector3(0.24, 0.24, 0.24), BLOCK_COLORS[(hash_value + i) % BLOCK_COLORS.size()], false)
+			var block_color: Color = BLOCK_COLORS[(hash_value + i) % BLOCK_COLORS.size()]
+			if i == 0 and hash_value % 2 == 0:
+				block_color = block_color.lerp(BLOOD_COLOR, 0.7)   # this one's been in something
+			var block := _add_box(_world, pos + spread + Vector3((i - 1) * 0.3, 0.12, (i % 2) * 0.25), Vector3(0.24, 0.24, 0.24), block_color, false)
 			block.rotation.y = (hash_value + i * 5) * 0.4
 	elif hash_value < 15:
 		for i in 2:
@@ -1140,6 +1295,38 @@ func _add_clutter(row: int, col: int, pos: Vector3) -> void:
 			drip.material_override = mat
 	elif hash_value < 22:
 		_add_chair(_world, pos + spread, hash_value * 0.7, CHAIR_COLORS[hash_value % CHAIR_COLORS.size()], true)
+	elif hash_value < 26:
+		# dragged across the room
+		var dir := Vector3(cos(hash_value * 1.7), 0, sin(hash_value * 1.7))
+		_add_drag_trail(pos - dir * 1.2, pos + dir * 1.2, hash_value)
+	elif hash_value < 29:
+		# it drips from the ceiling into a growing puddle
+		var drop_at := pos + spread
+		for i in 3:
+			var strand := _add_box(_world, drop_at + Vector3((i - 1) * 0.07, wall_height - 0.12 - i * 0.06, (i % 2) * 0.05), Vector3(0.025, 0.25 + i * 0.12, 0.025), BLOOD_COLOR, false) as MeshInstance3D
+			(strand.material_override as StandardMaterial3D).roughness = 0.2
+		var pool := _add_box(_world, drop_at + Vector3(0, 0.005, 0), Vector3(0.6, 0.006, 0.55), BLOOD_COLOR.darkened(0.2), false) as MeshInstance3D
+		var pool_mat := pool.material_override as StandardMaterial3D
+		pool_mat.roughness = 0.12
+		pool_mat.metallic = 0.3
+		var drop := MeshInstance3D.new()
+		drop.name = "Drip"
+		var drop_mesh := SphereMesh.new()
+		drop_mesh.radius = 0.025
+		drop_mesh.height = 0.06
+		drop.mesh = drop_mesh
+		drop.material_override = pool_mat
+		drop.position = drop_at + Vector3(0, wall_height - 0.4, 0)
+		_world.add_child(drop)
+		var fall := drop.create_tween().set_loops()
+		fall.tween_property(drop, "position:y", 0.02, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		fall.tween_property(drop, "position:y", wall_height - 0.4, 0.0)
+		fall.tween_interval(0.6 + (hash_value % 3) * 0.4)
+	elif hash_value < 31:
+		# a handprint on the CEILING
+		var hand := _add_handprint(pos, true, hash_value)
+		hand.position = pos + spread + Vector3(0, wall_height - 0.01, 0)
+		hand.rotation = Vector3(PI / 2.0, 0, hash_value * 0.9)
 
 
 func _make_door(pos: Vector3, color: Color, along_x: bool, cell: Vector2i) -> StaticBody3D:
@@ -1399,6 +1586,12 @@ func _add_box(parent: Node3D, pos: Vector3, size: Vector3, color: Color, solid: 
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = 0.9
+	# years of grime: one shared noise texture laid over everything in world space (stretched
+	# downwards, so the walls get water streaks and the floors get stains)
+	mat.albedo_texture = _grime()
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = true
+	mat.uv1_scale = Vector3(0.35, 0.12, 0.35)
 	mi.material_override = mat
 	if not solid:
 		mi.position = pos
@@ -1414,3 +1607,50 @@ func _add_box(parent: Node3D, pos: Vector3, size: Vector3, color: Color, solid: 
 	body.add_child(shape)
 	parent.add_child(body)
 	return body
+
+
+static var _grime_texture: NoiseTexture2D
+
+## Dirt, stains and water damage, generated once (no image files) and shared by every surface.
+## Dark blotches multiply the paint colour; most of it stays near white so colours survive.
+static func _grime() -> NoiseTexture2D:
+	if _grime_texture:
+		return _grime_texture
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.012
+	noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	noise.fractal_octaves = 5
+	noise.seed = 1313
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.28, 0.24, 0.2))
+	ramp.set_color(1, Color(1.0, 1.0, 1.0))
+	ramp.add_point(0.45, Color(0.62, 0.58, 0.52))
+	ramp.add_point(0.6, Color(0.92, 0.9, 0.86))
+	var tex := NoiseTexture2D.new()
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	tex.generate_mipmaps = true
+	tex.noise = noise
+	tex.color_ramp = ramp
+	_grime_texture = tex
+	return tex
+
+
+## The flashlight's lens: a hot middle, a bright ring, smudges and a dark edge - a cheap torch.
+static func _lens_texture() -> ImageTexture:
+	var size := 128
+	var img := Image.create(size, size, false, Image.FORMAT_RGB8)
+	var smudge := FastNoiseLite.new()
+	smudge.frequency = 0.05
+	smudge.seed = 7
+	for y in size:
+		for x in size:
+			var d := Vector2(x - size / 2.0, y - size / 2.0).length() / (size / 2.0)
+			var v := 0.55 + 0.45 * clampf(1.0 - d * 1.6, 0.0, 1.0)   # hot spot
+			v += 0.35 * exp(-pow((d - 0.72) / 0.06, 2.0))             # the reflector ring
+			v *= 0.8 + 0.25 * smudge.get_noise_2d(x, y)               # dirt on the glass
+			v *= clampf((1.0 - d) * 6.0, 0.0, 1.0)                    # dark edge
+			img.set_pixel(x, y, Color(v, v * 0.97, v * 0.9))
+	return ImageTexture.create_from_image(img)

@@ -15,6 +15,7 @@ extends RefCounted
 ##   hiss / howl / chitter / gurgle   monster voices (Natchee / Howler / Skitter / Gloop)
 ##   snarl         a monster winding up to swing    whoosh   the swing itself
 ##   click         a floor button clunking down     door     a door grinding open
+##   whisper       breathy, wordless whispering from somewhere behind you
 
 const RATE := 22050
 
@@ -93,6 +94,8 @@ static func _make(sound_name: String) -> AudioStreamWAV:
 			return _chitter()
 		"gurgle":
 			return _gurgle()
+		"whisper":
+			return _whisper()
 	push_warning("Sfx: no sound called '%s'" % sound_name)
 	return _wav(PackedFloat32Array([0.0]))
 
@@ -444,6 +447,48 @@ static func _giggle() -> AudioStreamWAV:
 		var env := 0.0 if bt > 0.12 or burst > 4 else sin(bt / 0.12 * PI)
 		out[i] = s * env
 	return _wav(_normalize(out, 0.8))
+
+
+## Whispering: breath noise pushed through two moving "mouth" resonances, in syllables -
+## it sounds like words, but none you can make out.
+static func _whisper() -> AudioStreamWAV:
+	var rng := _rng(99)
+	var n := int(RATE * 2.2)
+	var out := _silence(n)
+	var lp := _LowPass.new(4200.0)
+	var hp := 0.0
+	var b1 := [0.0, 0.0]
+	var b2 := [0.0, 0.0]
+	var syllable := 0.0
+	var next_at := 0.0
+	var vowel := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		if t >= next_at:
+			next_at = t + rng.randf_range(0.11, 0.24)
+			vowel = rng.randf()
+			syllable = t
+		var st := (t - syllable) / maxf(next_at - syllable, 0.01)
+		var env := sin(clampf(st, 0.0, 1.0) * PI) * (1.0 if fmod(t, 0.9) < 0.75 else 0.15)
+		env *= minf(t / 0.2, 1.0) * clampf((2.2 - t) / 0.3, 0.0, 1.0)
+		var noise := lp.next(rng.randf_range(-1.0, 1.0))
+		hp += (noise - hp) * 0.08
+		var air := noise - hp
+		# two resonances that slide with the "vowel" (a cheap two-pole band-pass each)
+		var f1 := lerpf(500.0, 900.0, vowel)
+		var f2 := lerpf(1300.0, 2400.0, 1.0 - vowel)
+		var r := 0.985
+		var c1 := 2.0 * r * cos(TAU * f1 / RATE)
+		var c2 := 2.0 * r * cos(TAU * f2 / RATE)
+		var y1: float = air * 0.05 + c1 * b1[0] - r * r * b1[1]
+		b1[1] = b1[0]
+		b1[0] = y1
+		var y2: float = air * 0.05 + c2 * b2[0] - r * r * b2[1]
+		b2[1] = b2[0]
+		b2[0] = y2
+		var sibilant := air * (0.6 if vowel > 0.8 else 0.15)
+		out[i] = (y1 + y2 * 0.7 + sibilant) * env
+	return _wav(_normalize(out, 0.6))
 
 
 ## The bird's voice: a raspy screeching caw.

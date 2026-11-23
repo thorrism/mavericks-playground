@@ -153,7 +153,20 @@ var _base_search_time := 0.0
 var _base_spawn_grace := 0.0
 var _base_hide_catch_range := 0.0
 var _base_check_cupboard_range := 0.0
-var _fit_scale := 1.0   # _visual.scale after fitting the normal-size model under a 2.8 m ceiling
+var _fit_scale := 1.0
+## Banbo: only moves while you're not looking at it. Light it with the flashlight and it freezes -
+## mid-step, wherever it is. Turn round and it's closer. (Up close it swings anyway.)
+@export var freeze_when_watched := false
+var _pupils: Array[Dictionary] = []           # pupils that follow the camera (see _track)
+var _glow_mats: Array[StandardMaterial3D] = []
+var _glow_base: Array[float] = []
+var _stare := 0.0          # seconds it stands dead still, staring, after spotting you from afar
+var _anim_accum := 0.0     # stop-motion: while hunting, the body only updates ~12 times a second
+var _snap := 0.0           # a sudden wrong tilt of the head that slowly rights itself
+var _snap_in := 4.0
+var _watched := false
+var _watch_check_in := 0.0
+var _scare_hold := 0.0     # held still, mouth wide, for the jump scare when it gets you   # _visual.scale after fitting the normal-size model under a 2.8 m ceiling
 
 
 func _ready() -> void:
@@ -236,6 +249,7 @@ func _apply_kind() -> void:
 			_step_sound = "thud"
 			_voice_sound = "giggle"
 			_attack_sound = "snarl"
+			freeze_when_watched = true
 		Kind.GIANT:
 			kind_name = "Jumbo"
 			color = Color("3aa040")
@@ -454,6 +468,10 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
+	if _scare_hold > 0.0:
+		_hold_pose(delta)
+		return
+
 	var player := _find_player()
 	var hidden := player != null and _is_hidden(player)
 	# climbing in while it's mid-swing at you counts as being watched, however far the lunge carries
@@ -466,6 +484,7 @@ func _physics_process(delta: float) -> void:
 		_attack_step(delta, player)
 		move_and_slide()
 		_animate(delta)
+		_track_eyes()
 		return
 
 	var awake := _grace <= 0.0
@@ -497,6 +516,8 @@ func _physics_process(delta: float) -> void:
 			Game.player_spotted(self)
 			_say(6.0)
 			_repath_in = 0.0
+			if _flat_distance(player.global_position) > 6.5:
+				_stare = 0.6   # from across the room: it stops dead and stares at you first
 		chasing = true
 	elif hears and not chasing:
 		# something moved over there... go and look
@@ -565,6 +586,30 @@ func _physics_process(delta: float) -> void:
 			_idle_for = randf_range(_idle_range.x, _idle_range.y)
 			_target = global_position
 
+	# Banbo under the flashlight: frozen mid-step, not even breathing
+	_watch_check_in -= delta
+	if freeze_when_watched and _watch_check_in <= 0.0:
+		_watch_check_in = 0.1
+		_watched = _is_watched()
+	if _watched and freeze_when_watched and (player == null or _flat_distance(player.global_position) > strike_range):
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
+		_track_eyes()
+		return
+
+	if _stare > 0.0:
+		_stare -= delta
+		if player:
+			var look := player.global_position - global_position
+			_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(look.x, look.z), turn_rate * 2.0 * delta)
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
+		_animate(delta)
+		_track_eyes()
+		return
+
 	var speed := chase_speed if chasing else wander_speed
 	var direct := sees or _flat_distance(_target) < 2.5
 	var step := _next_waypoint(direct)
@@ -585,7 +630,16 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, accel * delta)
 
 	move_and_slide()
-	_animate(delta)
+	# hunting, it moves like stop-motion: jerky, not quite alive
+	if chasing:
+		_anim_accum += delta
+		if _anim_accum >= 1.0 / 12.0:
+			_animate(_anim_accum)
+			_anim_accum = 0.0
+	else:
+		_anim_accum = 0.0
+		_animate(delta)
+	_track_eyes()
 
 	if moving and is_on_wall() and _repath_in > 0.1:
 		_repath_in = 0.1   # bumped into something: think again
@@ -815,10 +869,15 @@ func _animate(delta: float) -> void:
 		_eye.scale = Vector3(wide, wide * (0.55 if not chasing and sin(_time * 0.6) > 0.97 else 1.0), 1.0)   # ...and blinks now and then
 
 	# breathing, twitching head, working jaw; it looks up as it winds up and down as it slams
-	_head.rotation.z = sin(_time * 1.7) * 0.08 + (sin(_time * 23.0) * 0.06 if chasing else 0.0)
+	_snap_in -= delta
+	if _snap_in <= 0.0:
+		_snap_in = randf_range(1.5, 4.0) if chasing else randf_range(4.0, 10.0)
+		_snap = randf_range(0.7, 1.25) * (1.0 if randf() < 0.5 else -1.0)
+	_snap = move_toward(_snap, 0.0, delta * 0.7)
+	_head.rotation.z = sin(_time * 1.7) * 0.08 + (sin(_time * 23.0) * 0.06 if chasing else 0.0) + _snap
 	_head.rotation.x = -0.1 + sin(_time * 0.9) * 0.05 + (0.15 if chasing else 0.0) + _lean * 0.6
 	if _jaw:
-		var open := (0.25 + sin(_time * 14.0) * 0.2) if chasing else absf(sin(_time * 0.7)) * 0.08
+		var open := (0.45 + sin(_time * 14.0) * 0.25) if chasing else absf(sin(_time * 0.7)) * 0.08
 		_jaw.rotation.x = maxf(open, 0.5 * _arm_pose)
 
 
@@ -850,6 +909,53 @@ func _animate_limbs(delta: float, walking: bool, settle: float) -> void:
 				limb.rotation.z = lerpf(limb.rotation.z, rest_x + lift - 0.3 * _arm_pose * side, settle)
 			_:
 				pass
+
+
+## Is the player's flashlight on it right now (lit, in the beam, nothing in the way)?
+func _is_watched() -> bool:
+	if _level == null or not ("flashlight_on" in _level) or not _level.flashlight_on:
+		return false
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return false
+	var chest := global_position + Vector3.UP * 1.2
+	var to_me := chest - cam.global_position
+	var dist := to_me.length()
+	var reach: float = _level.flashlight_range if "flashlight_range" in _level else 18.0
+	var cone: float = _level.flashlight_angle if "flashlight_angle" in _level else 38.0
+	if dist > reach or dist < 0.1:
+		return false
+	if (-cam.global_basis.z).dot(to_me / dist) < cos(deg_to_rad(cone * 0.6)):
+		return false
+	var query := PhysicsRayQueryParameters3D.create(cam.global_position, chest)
+	var exclude: Array[RID] = [get_rid()]
+	for p in get_tree().get_nodes_in_group("player"):
+		exclude.append(p.get_rid())
+	query.exclude = exclude
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
+## The jump scare: it got you. Stand still, arms up, mouth as wide as it goes.
+func hold_for_jumpscare(seconds: float) -> void:
+	_scare_hold = seconds
+	velocity = Vector3.ZERO
+
+
+func _hold_pose(delta: float) -> void:
+	_scare_hold -= delta
+	velocity.x = 0.0
+	velocity.z = 0.0
+	move_and_slide()
+	var k := minf(1.0, 12.0 * delta)
+	_left_arm.rotation.x = lerpf(_left_arm.rotation.x, -2.6, k)
+	_right_arm.rotation.x = lerpf(_right_arm.rotation.x, -2.6, k)
+	if _jaw:
+		_jaw.rotation.x = lerpf(_jaw.rotation.x, 0.95, k)
+	_head.rotation.z = sin(_time * 41.0) * 0.07
+	_head.rotation.x = -0.2
+	if _eye:
+		_eye.scale = Vector3.ONE * 1.4
+	_track_eyes()
 
 
 func _footstep() -> void:
@@ -1087,13 +1193,14 @@ func _build_tall_one() -> void:
 
 	# eyes: big, white, glowing, with tiny pupils that stare
 	for side in [-1.0, 1.0]:
-		var eye := _sphere(0.17, Color("f4f4ff"), true, 1.6)
+		var eye := _sphere(0.17, Color("f4f4ff"), true, 2.6)
 		eye.scale = Vector3(1.0, 1.35, 0.7)
 		eye.position = Vector3(side * 0.21, head_h * 0.55, 0.42)
 		_head.add_child(eye)
 		var pupil := _sphere(0.055, Color("120000"))
 		pupil.position = eye.position + Vector3(side * -0.02, -0.02, 0.15)
 		_head.add_child(pupil)
+		_track(pupil, eye.position)
 		var brow := _box(Vector3(0.22, 0.05, 0.06), color.darkened(0.5))
 		brow.position = eye.position + Vector3(0, 0.26, 0.05)
 		brow.rotation.z = side * -0.35
@@ -1109,11 +1216,11 @@ func _build_tall_one() -> void:
 	var mouth_y := head_h * 0.15
 	for i in 7:
 		var k := (i - 3) / 3.0
-		var piece := _box(Vector3(0.14, 0.13, 0.08), Color("0a0508"))
+		var piece := _box(Vector3(0.14, 0.13, 0.08), Color("3a0408"))   # red gums
 		piece.position = Vector3(k * 0.42, mouth_y + k * k * 0.14, 0.44 - k * k * 0.08)
 		piece.rotation.z = -k * 0.45
 		_head.add_child(piece)
-		var tooth := _box(Vector3(0.07, 0.09, 0.04), Color("e8e2d0"))
+		var tooth := _box(Vector3(0.07, 0.09, 0.04), _tooth())
 		tooth.position = piece.position + Vector3(0, 0.03, 0.03)
 		_head.add_child(tooth)
 	_jaw = Node3D.new()
@@ -1123,7 +1230,7 @@ func _build_tall_one() -> void:
 	chin.position = Vector3(0, -0.06, 0.1)
 	_jaw.add_child(chin)
 	for i in 6:
-		var tooth := _box(Vector3(0.06, 0.08, 0.04), Color("e8e2d0"))
+		var tooth := _box(Vector3(0.06, 0.08, 0.04), _tooth())
 		tooth.position = Vector3((i - 2.5) * 0.11, 0.02, 0.17)
 		_jaw.add_child(tooth)
 
@@ -1194,12 +1301,13 @@ func _build_giant() -> void:
 	brow.position = Vector3(0, 0.36, 0.25)
 	_head.add_child(brow)
 	for side in [-1.0, 1.0]:
-		var eye := _sphere(0.075, Color("f4f4ff"), true, 1.6)
+		var eye := _sphere(0.075, Color("f4f4ff"), true, 2.6)
 		eye.position = Vector3(side * 0.24, 0.25, 0.33)
 		_head.add_child(eye)
 		var pupil := _sphere(0.03, Color("120000"))
 		pupil.position = eye.position + Vector3(0, 0, 0.06)
 		_head.add_child(pupil)
+		_track(pupil, eye.position)
 		var light := OmniLight3D.new()
 		light.light_color = Color("dfe8ff")
 		light.light_energy = 0.4
@@ -1207,11 +1315,11 @@ func _build_giant() -> void:
 		light.position = eye.position
 		_head.add_child(light)
 	# mouth: huge, wide, all teeth
-	var mouth := _box(Vector3(0.7, 0.2, 0.12), Color("0a0508"))
+	var mouth := _box(Vector3(0.7, 0.2, 0.12), Color("2e0306"))
 	mouth.position = Vector3(0, -0.02, 0.32)
 	_head.add_child(mouth)
 	for i in 8:
-		var tooth := _box(Vector3(0.06, 0.12, 0.05), Color("e8e2d0"))
+		var tooth := _box(Vector3(0.06, 0.12, 0.05), _tooth())
 		tooth.position = Vector3((i - 3.5) * 0.085, 0.06, 0.38)
 		_head.add_child(tooth)
 	_jaw = Node3D.new()
@@ -1221,7 +1329,7 @@ func _build_giant() -> void:
 	chin.position = Vector3(0, -0.08, 0.1)
 	_jaw.add_child(chin)
 	for i in 7:
-		var tooth := _box(Vector3(0.06, 0.1, 0.05), Color("e8e2d0"))
+		var tooth := _box(Vector3(0.06, 0.1, 0.05), _tooth())
 		tooth.position = Vector3((i - 3.0) * 0.1, 0.03, 0.22)
 		_jaw.add_child(tooth)
 
@@ -1235,6 +1343,10 @@ func _build_giant() -> void:
 		fist.scale = Vector3(1.0, 0.9, 1.1)
 		fist.position.y = -arm_len + 0.1
 		arm.add_child(fist)
+		var stain := _sphere(0.24, Color("4a0606"))   # what's on its knuckles?
+		stain.scale = Vector3(1.2, 0.7, 0.6)
+		stain.position = fist.position + Vector3(0, 0.05, 0.22)
+		arm.add_child(stain)
 		for k in 4:
 			var knuckle := _sphere(0.09, dark)
 			knuckle.position = fist.position + Vector3((k - 1.5) * 0.17, 0.05, 0.3)
@@ -1299,12 +1411,13 @@ func _build_bird() -> void:
 		crest.rotation.z = (i - 1) * 0.25
 		_head.add_child(crest)
 	for side in [-1.0, 1.0]:
-		var eye := _sphere(0.11, Color("f4f4ff"), true, 1.6)
+		var eye := _sphere(0.11, Color("f4f4ff"), true, 2.6)
 		eye.position = Vector3(side * 0.17, 0.08, 0.16)
 		_head.add_child(eye)
 		var pupil := _sphere(0.045, Color("120000"))
 		pupil.position = eye.position + Vector3(side * 0.02, 0.0, 0.09)
 		_head.add_child(pupil)
+		_track(pupil, eye.position)
 		var light := OmniLight3D.new()
 		light.light_color = Color("dfe8ff")
 		light.light_energy = 0.4
@@ -1324,7 +1437,7 @@ func _build_bird() -> void:
 	lower.rotation.x = PI / 2.0
 	_jaw.add_child(lower)
 	for i in 5:
-		var tooth := _box(Vector3(0.025, 0.06, 0.025), Color("e8e2d0"))
+		var tooth := _box(Vector3(0.025, 0.06, 0.025), _tooth())
 		tooth.position = Vector3((i - 2) * 0.035, 0.02, 0.15 + absf(i - 2) * 0.03)
 		_jaw.add_child(tooth)
 
@@ -1432,6 +1545,8 @@ func _build_plant() -> void:
 	pupil.scale = Vector3(1.0, 1.0, 0.5)
 	pupil.position.z = head_r * 0.33
 	_eye.add_child(pupil)
+	_track(pupil, Vector3.ZERO)
+	_track(iris, Vector3.ZERO)
 	var light := OmniLight3D.new()
 	light.light_color = Color("ffd040")
 	light.light_energy = 0.7
@@ -1530,7 +1645,7 @@ func _build_hound() -> void:
 	nose.position = Vector3(0, 0.05, 0.68)
 	_head.add_child(nose)
 	for i in 6:
-		var tooth := _cone(0.03, 0.12, Color("e8e2d0"))
+		var tooth := _cone(0.03, 0.12, _tooth())
 		tooth.position = Vector3((i - 2.5) * 0.06, -0.2, 0.45 + absf(i - 2.5) * -0.04)
 		tooth.rotation.x = PI
 		_head.add_child(tooth)
@@ -1541,7 +1656,7 @@ func _build_hound() -> void:
 	chin.position = Vector3(0, -0.05, 0.28)
 	_jaw.add_child(chin)
 	for i in 5:
-		var tooth := _cone(0.025, 0.1, Color("e8e2d0"))
+		var tooth := _cone(0.025, 0.1, _tooth())
 		tooth.position = Vector3((i - 2) * 0.06, 0.03, 0.5 - absf(i - 2) * 0.04)
 		_jaw.add_child(tooth)
 	for side in [-1.0, 1.0]:
@@ -1552,6 +1667,7 @@ func _build_hound() -> void:
 		var pupil := _sphere(0.025, Color("050000"))
 		pupil.position = eye.position + Vector3(0, 0, 0.06)
 		_head.add_child(pupil)
+		_track(pupil, eye.position)
 		var light_node := OmniLight3D.new()
 		light_node.light_color = Color("ff4030")
 		light_node.light_energy = 0.4
@@ -1659,7 +1775,7 @@ func _build_spider() -> void:
 	_jaw.position = Vector3(0, -0.15, 0.15)
 	_head.add_child(_jaw)
 	for side in [-1.0, 1.0]:
-		var fang := _cone(0.05, 0.3, Color("e8e2d0"))
+		var fang := _cone(0.05, 0.3, _tooth())
 		fang.position = Vector3(side * 0.12, -0.12, 0.12)
 		fang.rotation.x = PI + side * 0.2
 		_jaw.add_child(fang)
@@ -1689,7 +1805,7 @@ func _build_blob() -> void:
 	heap.position.y = r * 0.95
 	var mat := heap.material_override as StandardMaterial3D
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = Color(glow, 0.8)
+	mat.albedo_color = Color(glow, 0.6)   # see-through: you can see what's floating in it
 	mat.emission_enabled = true
 	mat.emission = glow
 	mat.emission_energy_multiplier = 0.35
@@ -1728,6 +1844,7 @@ func _build_blob() -> void:
 		var pupil := _sphere(er * 0.45, Color("120000"))
 		pupil.position = eye.position + dir * er * 0.7
 		_head.add_child(pupil)
+		_track(pupil, eye.position)
 		if n < 3:
 			var light_node := OmniLight3D.new()
 			light_node.light_color = Color("a0ff80")
@@ -1740,7 +1857,7 @@ func _build_blob() -> void:
 	mouth.position = Vector3(0, -r * 0.25, r * 1.05)
 	_head.add_child(mouth)
 	for i in 7:
-		var tooth := _cone(0.035, 0.14, Color("d8e0c0"))
+		var tooth := _cone(0.035, 0.14, _tooth())
 		tooth.position = Vector3((i - 3) * r * 0.16, -r * 0.14, r * 1.15 - absf(i - 3) * 0.04)
 		tooth.rotation.x = PI
 		_head.add_child(tooth)
@@ -1834,12 +1951,51 @@ func _make_limb(x: float, pivot_y: float, length: float, radius: float, c: Color
 func _mat(c: Color, glow := false, glow_strength := 4.0) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = c
-	mat.roughness = 0.85
+	# wet: they glisten in the flashlight, with a faint sheen round the edges
+	mat.roughness = 0.6
+	mat.rim_enabled = true
+	mat.rim = 0.2
+	mat.rim_tint = 0.5
 	if glow:
 		mat.emission_enabled = true
 		mat.emission = c
 		mat.emission_energy_multiplier = glow_strength
+		_glow_mats.append(mat)
+		_glow_base.append(glow_strength)
 	return mat
+
+
+## Bone-coloured, some of them stained.
+func _tooth() -> Color:
+	var bone := Color("e0d6b8")
+	return bone.lerp(Color("6a0a0a"), randf_range(0.35, 0.7)) if randf() < 0.35 else bone
+
+
+## A pupil that turns to follow the camera, round the middle of its eye.
+func _track(pupil: Node3D, center: Vector3) -> void:
+	_pupils.append({"node": pupil, "center": center, "rest": pupil.position})
+
+
+func _track_eyes() -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	for p: Dictionary in _pupils:
+		var node: Node3D = p["node"]
+		var parent := node.get_parent() as Node3D
+		var center: Vector3 = p["center"]
+		var rest: Vector3 = p["rest"]
+		var reach := (rest - center).length()
+		var rest_dir := (rest - center).normalized()
+		var want := (parent.global_transform.affine_inverse() * cam.global_position - center).normalized()
+		var dir := rest_dir.lerp(want, 0.65)
+		if dir.length() < 0.01:
+			continue
+		node.position = center + dir.normalized() * reach
+	# eyes burn brighter while it's hunting you
+	var boost := 1.8 if chasing else 1.0
+	for i in _glow_mats.size():
+		_glow_mats[i].emission_energy_multiplier = _glow_base[i] * boost
 
 
 func _sphere(radius: float, c: Color, glow := false, glow_strength := 4.0) -> MeshInstance3D:

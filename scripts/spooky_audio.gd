@@ -8,7 +8,12 @@ extends Node
 ##   events:        a chime when you find a toy, a scream when something SEES you,
 ##                  a screech when something GETS you
 ##   the building:  now and then something thuds, clacks or giggles somewhere off in the dark
-##   hiding:        your heartbeat, if one of them is close to the cupboard
+##   hiding:        your heartbeat, if one of them is close to the cupboard - and everything
+##                  outside sounds muffled through the doors
+##   the room:      an echo sized to the chapter (the theme's "reverb": tight classroom, huge gym)
+##   behind you:    sometimes whispering; sometimes a second set of footsteps that walks when
+##                  you walk and stops a moment after you stop
+##   hush(s):       everything but your heartbeat drains away for a moment (before a scare)
 
 @export_group("Volumes (dB)")
 @export var hum_db := -18.0
@@ -45,6 +50,16 @@ var _step_dist := 0.0
 var _step_variant := 0
 var _was_on_floor := true
 var _prev_vy := 0.0
+var _hush := 0.0            # seconds left of the hush before a scare
+var _hush_gain := 1.0       # 1 = normal .. 0 = silent
+var _muffle := 0.0          # 0 = open air .. 1 = inside a cupboard
+var _reverb: AudioEffectReverb
+var _lowpass: AudioEffectLowPassFilter
+var _follower: AudioStreamPlayer3D
+var _follow_for := 0.0      # seconds the footsteps behind you keep following
+var _follow_in := 70.0      # ...until they start again
+var _follow_queue: Array[float] = []   # echo steps waiting to land
+var _was_walking := false
 
 
 func _ready() -> void:
@@ -58,11 +73,18 @@ func _ready() -> void:
 	_ambient.unit_size = 6.0
 	_ambient.max_distance = 60.0
 	add_child(_ambient)
+	_follower = AudioStreamPlayer3D.new()
+	_follower.unit_size = 4.0
+	_follower.max_distance = 30.0
+	_follower.volume_db = footstep_db - 2.0
+	add_child(_follower)
+	_set_up_bus()
+	_follow_in = randf_range(50.0, 90.0)
 	_start_song(Songs.for_chapter(Settings.chapter))
 	Game.collected_one.connect(func(): _play(_fx, "chime"))
 	Game.spotted.connect(func(_by: Node3D): _play(_fx, "scream"))
 	Game.found.connect(func(_by: Node3D): _play(_fx, "scream", 2.0))
-	Game.caught.connect(func(_by: Node3D): _play(_fx, "screech"))
+	Game.caught.connect(func(_by: Node3D): _play(_fx, "screech", 6.0))
 
 
 func _process(delta: float) -> void:
@@ -74,7 +96,13 @@ func _process(delta: float) -> void:
 	_hunted = move_toward(_hunted, 1.0 if hunted else 0.0, delta * (3.0 if hunted else 0.4))
 	_panic.volume_db = lerpf(-60.0, panic_db, sqrt(_hunted))
 	_songbook(delta)
-	_music.volume_db = lerpf(-60.0, music_db + Songs.LIST[_song].get("db", 0.0), _song_gain * (1.0 - _hunted))
+	_hush = maxf(_hush - delta, 0.0)
+	_hush_gain = move_toward(_hush_gain, 0.0 if _hush > 0.0 else 1.0, delta * (1.5 if _hush > 0.0 else 0.5))
+	_music.volume_db = lerpf(-60.0, music_db + Songs.LIST[_song].get("db", 0.0), _song_gain * (1.0 - _hunted) * _hush_gain)
+	_hum.volume_db = lerpf(-50.0, hum_db, _hush_gain)
+	_muffle = move_toward(_muffle, 1.0 if Game.hiding else 0.0, delta * 3.0)
+	if _lowpass:
+		_lowpass.cutoff_hz = lerpf(20000.0, 700.0, _muffle)
 
 	# heartbeat: faster the more scared you are; slow and loud while you hide with one of them near
 	var hiding_near := Game.hiding and _nearest_monster() < 9.0
@@ -111,6 +139,78 @@ func _process(delta: float) -> void:
 		_note_index += 1
 
 	_footsteps(delta)
+	_follow(delta)
+
+
+## Before a scare: drain the music and the hum away for a moment, so it lands in silence.
+func hush(seconds: float) -> void:
+	_hush = maxf(_hush, seconds)
+
+
+## Echo and muffling live on the master bus (made in code, so there's no bus layout file).
+## The room size comes from the chapter's theme.
+func _set_up_bus() -> void:
+	var bus := AudioServer.get_bus_index("Master")
+	_reverb = null
+	_lowpass = null
+	for i in AudioServer.get_bus_effect_count(bus):
+		var fx := AudioServer.get_bus_effect(bus, i)
+		if fx is AudioEffectReverb:
+			_reverb = fx
+		elif fx is AudioEffectLowPassFilter:
+			_lowpass = fx
+	if _reverb == null:
+		_reverb = AudioEffectReverb.new()
+		AudioServer.add_bus_effect(bus, _reverb)
+	if _lowpass == null:
+		_lowpass = AudioEffectLowPassFilter.new()
+		AudioServer.add_bus_effect(bus, _lowpass)
+	var level := get_parent()
+	var room: float = 0.4
+	if level and "theme" in level:
+		room = level.theme.get("reverb", 0.4)
+	_reverb.room_size = room
+	_reverb.damping = lerpf(0.7, 0.3, room)
+	_reverb.wet = lerpf(0.12, 0.32, room)
+	_reverb.dry = 1.0
+	_reverb.predelay_msec = lerpf(20.0, 90.0, room)
+	_lowpass.cutoff_hz = 20000.0
+
+
+## Something walks behind you, in step with you - and stops just after you do.
+func _follow(delta: float) -> void:
+	var players := get_tree().get_nodes_in_group("player")
+	if players.is_empty() or get_tree().paused:
+		return
+	var p: CharacterBody3D = players[0]
+	if _follow_for <= 0.0:
+		_follow_in -= delta
+		if _follow_in <= 0.0 and _hunted < 0.1:
+			_follow_for = randf_range(8.0, 14.0)
+			_follow_in = randf_range(70.0, 140.0)
+	else:
+		_follow_for -= delta
+	for i in range(_follow_queue.size() - 1, -1, -1):
+		_follow_queue[i] -= delta
+		if _follow_queue[i] <= 0.0:
+			_follow_queue.remove_at(i)
+			var cam := get_viewport().get_camera_3d()
+			var back := cam.global_basis.z if cam else Vector3.BACK
+			back.y = 0.0
+			_follower.global_position = p.global_position + back.normalized() * randf_range(3.5, 5.0) + Vector3.UP * 0.2
+			_follower.stream = Sfx.get_sound("step%d" % (randi() % 4))
+			_follower.pitch_scale = randf_range(0.7, 0.8)
+			_follower.play()
+	var walking: bool = (p.active if "active" in p else true) and Vector2(p.velocity.x, p.velocity.z).length() > 1.0
+	if _was_walking and not walking and _follow_for > 0.0:
+		_follow_queue.append(0.55)   # ...one more step after you stop. Then nothing.
+	_was_walking = walking
+
+
+## Called for each of your footsteps: while it follows you, it steps a beat behind.
+func _echo_step() -> void:
+	if _follow_for > 0.0:
+		_follow_queue.append(randf_range(0.22, 0.3))
 
 
 ## Songs take turns: play, fade out, a few seconds of nothing but the hum, the next one fades in.
@@ -159,6 +259,16 @@ func _far_noise() -> void:
 	var dist := randf_range(8.0, 16.0)
 	_ambient.global_position = p.global_position + Vector3(cos(angle) * dist, 1.0, sin(angle) * dist)
 	var roll := randf()
+	if roll > 0.88:
+		# a whisper, close behind you
+		var cam := get_viewport().get_camera_3d()
+		var back := cam.global_basis.z if cam else Vector3.BACK
+		back.y = 0.0
+		_ambient.global_position = p.global_position + back.normalized() * randf_range(1.5, 2.5) + Vector3(randf_range(-1.0, 1.0), 1.4, 0.0)
+		_ambient.stream = Sfx.get_sound("whisper")
+		_ambient.pitch_scale = randf_range(0.85, 1.05)
+		_ambient.play()
+		return
 	var sound := "thud"
 	var pitch := randf_range(0.5, 0.7)
 	if roll < 0.3:
@@ -195,6 +305,7 @@ func _footsteps(delta: float) -> void:
 			_step_dist = 0.0
 			_step_variant = (_step_variant + 1 + randi() % 3) % 4
 			_play(_steps, "step%d" % _step_variant, randf_range(-3.0, 0.0), randf_range(0.9, 1.12))
+			_echo_step()
 	else:
 		_step_dist = STRIDE * 0.7   # first step comes quickly when you start walking
 
