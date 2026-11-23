@@ -85,13 +85,13 @@ const THEMES: Dictionary = {
 		"table": Color("9a8a7a"), "crate": Color("7a6a5a"),
 	},
 	"playground": {
-		"outdoors": true, "decor": false, "ambient": 0.06, "reverb": 0.15,
+		"outdoors": true, "decor": false, "ambient": 0.09, "reverb": 0.15,
 		"floor": Color("22301c"), "outside": Color("151e12"), "walls": [Color("1e3a1e"), Color("243e22")],
 		"low_wall": Color("4a3a34"), "fence": Color("555a5e"), "shelf": Color("6a3a2a"), "crate": Color("8a3a2a"),
 		"lamps": [Color("ffd9a0")], "words": [],
 	},
 	"lab": {
-		"wall_height": 5.4, "ambient": 0.03, "glow": Color("46ff70"), "reverb": 0.85,
+		"wall_height": 5.4, "ambient": 0.045, "glow": Color("46ff70"), "reverb": 0.85,
 		"floor": Color("2a2e2c"), "ceiling": Color("1a1c1c"), "walls": [Color("3a4a48"), Color("4a4a52"), Color("2e3e3e")],
 		"stripes": [Color("80c0b0"), Color("a0a0c0"), Color("70b0a0")],
 		"words": ["SUBJECT 7 ESCAPED", "it went wrong", "seal the lab", "HELP", "we made them", "DON'T OPEN THE TANKS", "they grew"],
@@ -139,10 +139,10 @@ const FENCE_LAYER := 2
 
 # Spooky settings
 @export_group("Scary")
-@export var flashlight_range := 18.0      # how far your light reaches
-@export var flashlight_energy := 10.0
+@export var flashlight_range := 22.0      # how far your light reaches
+@export var flashlight_energy := 14.0
 @export var flashlight_angle := 38.0      # cone width in degrees
-@export var fog_density := 0.065          # bigger = murkier
+@export var fog_density := 0.05          # bigger = murkier
 @export var flashlight_lag := 9.0         # how fast the beam catches up with where you look (bigger = stiffer)
 @export var scares_enabled := true        # the scripted scares in scripts/scares.gd (shapes in the dark, words behind you...)
 @export var mouse_sensitivity := 0.0025
@@ -281,7 +281,7 @@ func _load_chapter(index: int) -> void:
 func _apply_theme_environment() -> void:
 	var e: Environment = env.environment.duplicate()
 	env.environment = e
-	e.ambient_light_energy = theme.get("ambient", 0.035)
+	e.ambient_light_energy = theme.get("ambient", 0.055)
 	var moon: DirectionalLight3D = get_node_or_null("Moon")
 	if outdoors:
 		var sky := Sky.new()
@@ -1648,9 +1648,9 @@ static func _lens_texture() -> ImageTexture:
 	for y in size:
 		for x in size:
 			var d := Vector2(x - size / 2.0, y - size / 2.0).length() / (size / 2.0)
-			var v := 0.55 + 0.45 * clampf(1.0 - d * 1.6, 0.0, 1.0)   # hot spot
+			var v := 0.75 + 0.25 * clampf(1.0 - d * 1.6, 0.0, 1.0)   # hot spot
 			v += 0.35 * exp(-pow((d - 0.72) / 0.06, 2.0))             # the reflector ring
-			v *= 0.8 + 0.25 * smudge.get_noise_2d(x, y)               # dirt on the glass
+			v *= 0.9 + 0.15 * smudge.get_noise_2d(x, y)               # dirt on the glass
 			v *= clampf((1.0 - d) * 6.0, 0.0, 1.0)                    # dark edge
 			img.set_pixel(x, y, Color(v, v * 0.97, v * 0.9))
 	return ImageTexture.create_from_image(img)
