@@ -566,7 +566,9 @@ func _physics_process(delta: float) -> void:
 			_target = global_position
 
 	var speed := chase_speed if chasing else wander_speed
-	var direct := sees or _flat_distance(_target) < 2.5
+	# straight at it if it can see you and nothing solid is in the way (a fence or a table it can
+	# see over still has to be walked round)
+	var direct: bool = (sees or _flat_distance(_target) < 2.5) and (_level == null or _level.is_straight_walkable(global_position, _target))
 	var step := _next_waypoint(direct)
 	var to_step := step - global_position
 	to_step.y = 0.0

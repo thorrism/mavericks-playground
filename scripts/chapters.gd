@@ -3,7 +3,7 @@ class_name Chapters
 ## Every chapter is a text map (see the legend in kinder.gd). Edit the map = edit the chapter!
 ##
 ##   #  wall / hedge        .  floor            P  where you start        X  exit door
-##   W  low wall (only the drone flies over)    =  fence (jump it; THEY step over)
+##   W  low wall (only the drone flies over)    =  fence (jump it; THEY have to walk round)
 ##   T  toy                 L  lamp              H  cupboard to hide in    t  table
 ##   S  shelf (lockers / bookcase / lab tank / swings outside)   Z  crates (slide outside)
 ##   ^  pillar (a tree outside)

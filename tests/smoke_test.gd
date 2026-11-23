@@ -287,6 +287,33 @@ func _test_kinder() -> void:
 	_check(level.find_path(giant.global_position, start).is_empty(), "...but not while it's shut")
 	level._grid.set_point_solid(level._cell_of(world.get_node("Door3").global_position), false)
 
+	# fences: you can jump them, THEY can't - not on the path grid and not in the physics either
+	var button_cell := Vector2i(-1, -1)
+	for row in level.MAP.size():
+		var col: int = level.MAP[row].find("a")
+		if col >= 0:
+			button_cell = Vector2i(col, row)
+	var button_pos: Vector3 = level._tile_pos(button_cell.y, button_cell.x)
+	var fence_pos: Vector3 = level._tile_pos(button_cell.y, button_cell.x - 1)
+	var outside: Vector3 = level._tile_pos(button_cell.y, button_cell.x - 2)
+	_check(level.MAP[button_cell.y][button_cell.x - 1] == "=" and level.MAP[button_cell.y][button_cell.x - 2] == ".",
+		"button a sits in a fenced pen with floor outside it")
+	_check(not level.is_walkable(fence_pos) and level.find_path(outside, button_pos).is_empty(),
+		"monsters can't path through a fence: the fenced button is out of their reach")
+	_check(level.is_straight_walkable(outside, outside + Vector3(0, 0, -2.0)) and not level.is_straight_walkable(outside, button_pos),
+		"a straight line across a fence is not a walkable line")
+	var monster_home: Vector3 = monster.global_position
+	monster.global_position = outside + Vector3(0, 0.1, 0)
+	monster.velocity = Vector3(3.0, 0.0, 0.0)   # march at the fence
+	for _i in 30:
+		await physics_frame
+		monster.velocity = Vector3(3.0, monster.velocity.y, 0.0)
+		monster.move_and_slide()
+	_check(monster.global_position.x < fence_pos.x - 0.6 and monster.is_on_wall(),
+		"a monster walking into a fence is stopped by it (x=%.2f, fence at %.2f)" % [monster.global_position.x, fence_pos.x])
+	monster.velocity = Vector3.ZERO
+	monster.global_position = monster_home
+
 	# ...but every monster is tied to its own room: it can't see, hear or grab you from another one
 	var start_room: int = level.room_at(start)
 	var tall_room: int = level.room_at(monster.global_position)

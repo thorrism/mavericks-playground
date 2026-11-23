@@ -5,7 +5,7 @@ extends Node3D
 ##
 ##   #  wall (a hedge outside)   .  floor      P  where you start
 ##   W  low wall (only the drone can fly over it)
-##   =  fence (you can jump over it - THEY just step over it)
+##   =  fence (you can jump over it - THEY can't: they have to walk round, like everything solid)
 ##   T  toy to collect                         X  exit door (opens when all toys are found)
 ##   M  Banbo (tall one)   J  Jumbo (giant)   O  Opi (bird, retired)   N  Natchee (one-eyed flower)
 ##   D  Howler (four legs)  K  Skitter (six legs)  G  Gloop (lab slime)  - one of each kind per chapter, max
@@ -130,9 +130,6 @@ const MonsterScript := preload("res://scripts/monster.gd")
 const DroneScript := preload("res://scripts/drone.gd")
 const LampScript := preload("res://scripts/lamp.gd")
 
-## Fences live on this physics layer: the player and drone bump into them, monsters walk through.
-const FENCE_LAYER := 2
-
 # Spooky settings
 @export_group("Scary")
 @export var flashlight_range := 18.0      # how far your light reaches
@@ -199,11 +196,9 @@ func _ready() -> void:
 	Game.found.connect(_on_found)
 	Game.missed.connect(_on_missed)
 
-	robot.collision_mask |= 1 << (FENCE_LAYER - 1)
 	drone = CharacterBody3D.new()
 	drone.name = "Drone"
 	drone.set_script(DroneScript)
-	drone.collision_mask |= 1 << (FENCE_LAYER - 1)
 	var shape := CollisionShape3D.new()
 	var sphere := SphereShape3D.new()
 	sphere.radius = 0.3
@@ -611,7 +606,7 @@ func _build_grid() -> void:
 	for row in rows:
 		for col in cols:
 			var ch := MAP[row][col]
-			if ch in "#WXHtSZ^" or (ch >= "1" and ch <= "9"):
+			if ch in "#WXHtSZ^=" or (ch >= "1" and ch <= "9"):
 				_grid.set_point_solid(Vector2i(col, row), true)
 
 
@@ -644,6 +639,17 @@ func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 
 func is_walkable(pos: Vector3) -> bool:
 	return not _grid.is_point_solid(_cell_of(pos))
+
+
+## Can something walk in a straight line from here to there without hitting anything solid?
+## (Seeing you over a fence or a table is not the same as being able to walk straight at you.)
+func is_straight_walkable(from: Vector3, to: Vector3) -> bool:
+	var flat := Vector3(to.x - from.x, 0.0, to.z - from.z)
+	var steps := maxi(1, int(ceil(flat.length() / (TILE * 0.5))))
+	for i in steps + 1:
+		if not is_walkable(from + flat * (float(i) / steps)):
+			return false
+	return true
 
 
 ## Rooms: every floor tile gets a room number; walls, low walls and doorways split rooms.
@@ -779,8 +785,7 @@ func _build_level() -> void:
 				"W":
 					_add_box(_world, pos + Vector3(0, LOW_WALL_HEIGHT / 2.0, 0), Vector3(TILE, LOW_WALL_HEIGHT, TILE), theme.get("low_wall", LOW_WALL_COLOR), true)
 				"=":
-					var fence := _add_box(_world, pos + Vector3(0, FENCE_HEIGHT / 2.0, 0), Vector3(TILE, FENCE_HEIGHT, TILE), theme.get("fence", FENCE_COLOR), true)
-					fence.collision_layer = 1 << (FENCE_LAYER - 1)
+					_add_box(_world, pos + Vector3(0, FENCE_HEIGHT / 2.0, 0), Vector3(TILE, FENCE_HEIGHT, TILE), theme.get("fence", FENCE_COLOR), true)
 				"S":
 					if outdoors:
 						_add_swings(row, col, pos)
